@@ -8,8 +8,15 @@ const connectionString = process.env.DATABASE_URL;
 let pool;
 
 if (connectionString) {
-  // Single DATABASE_URL string
-  pool = new Pool({ connectionString });
+  // Single DATABASE_URL string (e.g. Supabase, Render Postgres)
+  // Many cloud providers require SSL
+  pool = new Pool({ 
+    connectionString,
+    ssl: {
+      rejectUnauthorized: false
+    }
+  });
+  console.log('[DB] Connection config: Using DATABASE_URL');
 } else {
   // Host/port/db config from individual env vars
   pool = new Pool({
@@ -19,14 +26,13 @@ if (connectionString) {
     password: process.env.DB_PASSWORD || '',
     database: process.env.DB_NAME || 'postgres',
   });
+  console.log('[DB] Connection config:', {
+    host: process.env.DB_HOST || 'localhost',
+    port: process.env.DB_PORT || 5432,
+    user: process.env.DB_USER || 'postgres',
+    database: process.env.DB_NAME || 'postgres',
+  });
 }
-
-console.log('[DB] Connection config:', {
-  host: process.env.DB_HOST || 'localhost',
-  port: process.env.DB_PORT || 5432,
-  user: process.env.DB_USER || 'postgres',
-  database: process.env.DB_NAME || 'postgres',
-});
 
 // Test connection immediately
 pool.query('SELECT NOW()', (err, res) => {
