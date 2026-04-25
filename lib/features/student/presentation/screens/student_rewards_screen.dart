@@ -37,7 +37,7 @@ class StudentRewardsScreen extends StatelessWidget {
                 style: GoogleFonts.poppins(
                   fontSize: 12,
                   fontWeight: FontWeight.w500,
-                  color: scheme.onSurface.withValues(alpha: 160),
+                  color: scheme.onSurface.withAlpha(160),
                 ),
               ),
               const SizedBox(height: 14),
@@ -46,10 +46,10 @@ class StudentRewardsScreen extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: scheme.surface,
                   borderRadius: BorderRadius.circular(22),
-                  border: Border.all(color: scheme.onSurface.withValues(alpha: 12)),
+                  border: Border.all(color: scheme.onSurface.withAlpha(12)),
                   boxShadow: [
                     BoxShadow(
-                      color: theme.shadowColor.withValues(alpha: 10),
+                      color: theme.shadowColor.withAlpha(10),
                       blurRadius: 16,
                       offset: const Offset(0, 8),
                     ),
@@ -83,7 +83,7 @@ class StudentRewardsScreen extends StatelessWidget {
                     WeeklyFireTracker(
                       loggedInOnDay: student.loggedInOnDay,
                       activeColor: scheme.secondary,
-                      inactiveColor: scheme.onSurface.withValues(alpha: 70),
+                      inactiveColor: scheme.onSurface.withAlpha(70),
                     ),
                     const SizedBox(height: 14),
                     Row(
@@ -140,7 +140,7 @@ class _BadgeChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: scheme.primary.withValues(alpha: 14),
+        color: scheme.primary.withAlpha(14),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Row(

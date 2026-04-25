@@ -27,7 +27,6 @@ class StudentHomeScreen extends StatefulWidget {
 class _StudentHomeScreenState extends State<StudentHomeScreen> {
   String _searchQuery = '';
   String _selectedCategory = 'Top';
-  bool _showStreakPopup = true;
   final Set<String> _categoryFilters = {};
   final Set<CourseDifficulty> _difficultyFilters = {};
   _CourseSortMode _sortMode = _CourseSortMode.top;
@@ -35,10 +34,6 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
   @override
   void initState() {
     super.initState();
-    Future<void>.delayed(const Duration(seconds: 3), () {
-      if (!mounted) return;
-      setState(() => _showStreakPopup = false);
-    });
   }
 
   bool get _hasActiveFilters =>
@@ -238,56 +233,7 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
                     ),
                     const SizedBox(height: 16),
 
-                    if (_showStreakPopup) ...[
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF3E8FF),
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: const BoxDecoration(
-                                color: Color(0xFFE8D4FF),
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(Icons.military_tech_rounded, color: Color(0xFF9333EA), size: 20),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Streak Updated',
-                                    style: GoogleFonts.inter(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w700,
-                                      color: const Color(0xFF6B21A8),
-                                    ),
-                                  ),
-                                  Text(
-                                    '+1 Coin',
-                                    style: GoogleFonts.inter(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w500,
-                                      color: const Color(0xFF9333EA),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            GestureDetector(
-                              onTap: () => setState(() => _showStreakPopup = false),
-                              child: const Icon(Icons.close_rounded, color: Color(0xFF9333EA), size: 20),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                    ],
+
 
                     // Hero card with embedded weekly tracker
                     StudentHeroCard(
@@ -328,23 +274,28 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
                     // Categories
                     _SectionHeader(title: 'Categories', action: 'See All', onAction: () {}),
                     const SizedBox(height: 16),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: List.generate(categories.length > 8 ? 8 : categories.length, (i) {
-                        final item = categories[i];
-                        return _CategoryCard(
-                          label: item.label,
-                          icon: item.icon,
-                          color: _categoryColor(scheme, i),
-                          onTap: () => setState(() {
-                            _selectedCategory = item.label;
-                            _categoryFilters
-                              ..clear()
-                              ..addAll(item.label == 'Top' ? const [] : [item.label]);
-                          }),
-                        );
-                      }),
+                    SizedBox(
+                      height: 40,
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: categories.length,
+                        separatorBuilder: (_, __) => const SizedBox(width: 8),
+                        itemBuilder: (context, i) {
+                          final item = categories[i];
+                          final isSelected = _selectedCategory == item.label;
+                          return _CategoryPill(
+                            label: item.label == 'Top' ? 'All' : item.label,
+                            icon: item.icon,
+                            selected: isSelected,
+                            onTap: () => setState(() {
+                              _selectedCategory = item.label;
+                              _categoryFilters
+                                ..clear()
+                                ..addAll(item.label == 'Top' ? const [] : [item.label]);
+                            }),
+                          );
+                        },
+                      ),
                     ),
 
                     const SizedBox(height: 22),
@@ -370,9 +321,11 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
                         separatorBuilder: (_, _) => const SizedBox(height: 12),
                         itemBuilder: (context, i) {
                           final course = enrolledCourses[i];
+                          final progress = student.getCourseProgress(course.id);
                           return _CourseDiscoveryCard(
                             course: course,
                             index: i,
+                            progress: progress,
                             onTap: () => Navigator.of(context)
                                 .pushNamed(CourseDetailScreen.routeName, arguments: course.id),
                           );
@@ -401,9 +354,11 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
                               separatorBuilder: (_, _) => const SizedBox(height: 12),
                               itemBuilder: (context, i) {
                                 final course = filteredCourses[i];
+                                final progress = student.getCourseProgress(course.id);
                                 return _CourseDiscoveryCard(
                                   course: course,
                                   index: i,
+                                  progress: progress,
                                   onTap: () => Navigator.of(context).pushNamed(
                                     CourseDetailScreen.routeName,
                                     arguments: course.id,
@@ -594,7 +549,7 @@ class _SectionHeader extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: (badgeColor ?? scheme.primary).withValues(alpha: 18),
+              color: (badgeColor ?? scheme.primary).withAlpha(18),
               borderRadius: BorderRadius.circular(20),
             ),
             child: Text(
@@ -611,7 +566,7 @@ class _SectionHeader extends StatelessWidget {
             onTap: onAction,
             child: Text(
               action!,
-              style: GoogleFonts.poppins(
+              style: GoogleFonts.inter(
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
                 color: scheme.primary,
@@ -635,117 +590,184 @@ class _SearchBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return TextField(
-      onChanged: onChanged,
-      style: GoogleFonts.inter(
-        fontSize: 14,
-        fontWeight: FontWeight.w400,
-        color: const Color(0xFF1F2937),
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        borderRadius: BorderRadius.circular(30),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
-      decoration: InputDecoration(
-        hintText: hintText,
-        hintStyle: GoogleFonts.inter(
+      child: TextField(
+        onChanged: onChanged,
+        style: GoogleFonts.inter(
           fontSize: 14,
           fontWeight: FontWeight.w400,
-          color: const Color(0xFF9CA3AF),
+          color: scheme.onSurface,
         ),
-        prefixIcon: const Icon(Icons.search_rounded, color: Color(0xFF6B7280), size: 20),
-        filled: true,
-        fillColor: const Color(0xFFF3F4F6),
-        contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 16),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(24), // fully rounded pill
-          borderSide: BorderSide.none,
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(24),
-          borderSide: BorderSide.none,
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(24),
-          borderSide: const BorderSide(color: Color(0xFF2563EB), width: 1.5),
+        decoration: InputDecoration(
+          hintText: hintText,
+          hintStyle: GoogleFonts.inter(
+            fontSize: 14,
+            fontWeight: FontWeight.w400,
+            color: scheme.onSurface.withAlpha(120),
+          ),
+          prefixIcon: Icon(Icons.search_rounded,
+              color: scheme.onSurface.withAlpha(160), size: 20),
+          filled: true,
+          fillColor: Colors.transparent, // Controlled by container
+          contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(30),
+            borderSide: BorderSide.none,
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(30),
+            borderSide: BorderSide.none,
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(30),
+            borderSide: BorderSide(color: scheme.primary.withValues(alpha: 0.3), width: 1),
+          ),
         ),
       ),
     );
   }
 }
 
-class _FilterButton extends StatelessWidget {
+class _FilterButton extends StatefulWidget {
   const _FilterButton({required this.active, required this.onTap});
   final bool active;
   final VoidCallback onTap;
+  @override
+  State<_FilterButton> createState() => _FilterButtonState();
+}
+
+class _FilterButtonState extends State<_FilterButton> {
+  bool _pressed = false;
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 48,
-        height: 48,
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: const Color(0xFFE5E7EB)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            )
-          ],
-        ),
-        alignment: Alignment.center,
-        child: Icon(
-          Icons.tune_rounded,
-          color: active ? const Color(0xFF2563EB) : const Color(0xFF6B7280),
-          size: 20,
+      onTap: widget.onTap,
+      onTapDown: (_) => setState(() => _pressed = true),
+      onTapUp: (_) => setState(() => _pressed = false),
+      onTapCancel: () => setState(() => _pressed = false),
+      child: AnimatedScale(
+        duration: const Duration(milliseconds: 120),
+        scale: _pressed ? 0.92 : 1.0,
+        child: Container(
+          width: 48,
+          height: 48,
+          decoration: BoxDecoration(
+            color: widget.active
+                ? scheme.primary
+                : (isDark ? const Color(0xFF1E1E1E) : Colors.white),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: widget.active
+                  ? scheme.primary
+                  : scheme.onSurface.withValues(alpha: 0.08),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.04),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              )
+            ],
+          ),
+          alignment: Alignment.center,
+          child: Icon(
+            Icons.tune_rounded,
+            color: widget.active
+                ? Colors.white
+                : scheme.onSurface.withAlpha(180),
+            size: 20,
+          ),
         ),
       ),
     );
   }
 }
 
-// Category card strictly following image
-class _CategoryCard extends StatelessWidget {
-  const _CategoryCard({
+// Category pill chip
+class _CategoryPill extends StatelessWidget {
+  const _CategoryPill({
     required this.label,
     required this.icon,
-    required this.color,
+    required this.selected,
     required this.onTap,
   });
 
   final String label;
   final IconData icon;
-  final Color color;
+  final bool selected;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+
     return GestureDetector(
       onTap: onTap,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 60,
-            height: 60,
-            decoration: BoxDecoration(
-              color: color,
-              borderRadius: BorderRadius.circular(24), // Circular/Squircle match image
-            ),
-            alignment: Alignment.center,
-            child: Icon(icon, size: 28, color: Colors.white),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          gradient: selected
+              ? LinearGradient(
+                  colors: [scheme.primary, scheme.primary.withAlpha(200)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                )
+              : null,
+          color: selected ? null : (isDark ? const Color(0xFF1E1E1E) : Colors.white),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: selected ? scheme.primary : scheme.onSurface.withValues(alpha: 0.1),
+            width: 1,
           ),
-          const SizedBox(height: 8),
-          Text(
-            label == 'Top' ? 'All' : label,
-            style: GoogleFonts.inter(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: const Color(0xFF1F2937),
+          boxShadow: selected
+              ? [
+                  BoxShadow(
+                    color: scheme.primary.withValues(alpha: 0.25),
+                    blurRadius: 8,
+                    offset: const Offset(0, 4),
+                  ),
+                ]
+              : [],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 16,
+              color: selected ? Colors.white : scheme.onSurface.withAlpha(160),
             ),
-          ),
-        ],
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: GoogleFonts.inter(
+                fontSize: 13,
+                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                color: selected ? Colors.white : scheme.onSurface.withAlpha(200),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -757,11 +779,13 @@ class _CourseDiscoveryCard extends StatefulWidget {
     required this.course,
     required this.onTap,
     required this.index,
+    this.progress,
   });
 
   final Course course;
   final VoidCallback onTap;
   final int index;
+  final double? progress;
 
   @override
   State<_CourseDiscoveryCard> createState() => _CourseDiscoveryCardState();
@@ -787,12 +811,8 @@ class _CourseDiscoveryCardState extends State<_CourseDiscoveryCard> {
       CourseDifficulty.intermediate => _diffColors[1],
       CourseDifficulty.advanced     => _diffColors[2],
     };
-    final badgeBg = diffColor.withValues(alpha: 28);
-    final badgeTextColor =
-        ThemeData.estimateBrightnessForColor(badgeBg) == Brightness.dark
-            ? Colors.white
-            : const Color(0xFF1F2937);
-
+    final badgeBg = diffColor.withAlpha(28);
+    final isDark = theme.brightness == Brightness.dark;
     return GestureDetector(
       onTapDown: (_) => setState(() => _pressed = true),
       onTapUp: (_) => setState(() => _pressed = false),
@@ -803,12 +823,12 @@ class _CourseDiscoveryCardState extends State<_CourseDiscoveryCard> {
         scale: _pressed ? 0.98 : 1.0,
         child: Container(
           decoration: BoxDecoration(
-            color: scheme.surface,
+            color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: scheme.onSurface.withValues(alpha: 10)),
+            border: Border.all(color: scheme.onSurface.withValues(alpha: 0.08)),
             boxShadow: [
               BoxShadow(
-                color: theme.shadowColor.withValues(alpha: 8),
+                color: Colors.black.withValues(alpha: 0.04),
                 blurRadius: 16,
                 offset: const Offset(0, 6),
               ),
@@ -820,19 +840,19 @@ class _CourseDiscoveryCardState extends State<_CourseDiscoveryCard> {
               ClipRRect(
                 borderRadius: const BorderRadius.horizontal(left: Radius.circular(20)),
                 child: SizedBox(
-                  width: 100,
-                  height: 88,
+                  width: 110,
+                  height: 96,
                   child: course.thumbnailUrl.isNotEmpty
                       ? Image.network(
                           course.thumbnailUrl,
                           fit: BoxFit.cover,
                           errorBuilder: (_, __, ___) => _ThumbPlaceholder(
-                              color: scheme.primary.withValues(alpha: 20),
+                              color: scheme.primary.withAlpha(20),
                               icon: Icons.play_circle_outline_rounded,
                               iconColor: scheme.primary),
                         )
                       : _ThumbPlaceholder(
-                          color: scheme.primary.withValues(alpha: 20),
+                          color: scheme.primary.withAlpha(20),
                           icon: Icons.play_circle_outline_rounded,
                           iconColor: scheme.primary),
                 ),
@@ -840,62 +860,95 @@ class _CourseDiscoveryCardState extends State<_CourseDiscoveryCard> {
               // Info
               Expanded(
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
                         children: [
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                             decoration: BoxDecoration(
                               color: badgeBg,
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: diffColor.withValues(alpha: 65)),
+                              borderRadius: BorderRadius.circular(8),
                             ),
                             child: Text(
-                              course.difficulty.name[0].toUpperCase() +
-                                  course.difficulty.name.substring(1),
+                              course.difficulty.name.toUpperCase(),
                               style: GoogleFonts.inter(
-                                fontSize: 10,
+                                fontSize: 9,
                                 fontWeight: FontWeight.w800,
-                                color: badgeTextColor,
+                                color: diffColor,
+                                letterSpacing: 0.5,
                               ),
                             ),
                           ),
                           if (course.isFeatured) ...[
-                            const SizedBox(width: 6),
-                            Icon(Icons.star_rounded, size: 13, color: LmsAdminTheme.coinGold),
+                            const SizedBox(width: 8),
+                            Icon(Icons.star_rounded, size: 14, color: LmsAdminTheme.coinGold),
                           ],
                         ],
                       ),
-                      const SizedBox(height: 6),
+                      const SizedBox(height: 8),
                       Text(
                         course.title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: GoogleFonts.inter(
-                            fontSize: 14, fontWeight: FontWeight.w700, color: const Color(0xFF1F2937)),
+                            fontSize: 15, fontWeight: FontWeight.w700, color: scheme.onSurface),
                       ),
                       const SizedBox(height: 4),
-                      Text(
-                        course.description,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.inter(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                          color: const Color(0xFF6B7280),
+                      if (widget.progress == null || widget.progress == 0) ...[
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            Icon(Icons.monetization_on_rounded, size: 14, color: LmsAdminTheme.coinGold),
+                            const SizedBox(width: 4),
+                            Text(
+                              course.price == 0 ? 'Free' : '₹${course.price.toStringAsFixed(0)}',
+                              style: GoogleFonts.inter(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w800,
+                                color: LmsAdminTheme.coinGold,
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
+                      ],
+                      if (widget.progress != null && widget.progress! > 0) ...[
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(4),
+                                child: LinearProgressIndicator(
+                                  value: widget.progress,
+                                  minHeight: 4,
+                                  backgroundColor: scheme.primary.withAlpha(20),
+                                  valueColor: AlwaysStoppedAnimation<Color>(scheme.primary),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              '${(widget.progress! * 100).round()}%',
+                              style: GoogleFonts.inter(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                                color: scheme.primary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.only(right: 14),
-                child: Icon(Icons.arrow_forward_ios_rounded,
-                    size: 14, color: scheme.onSurface.withValues(alpha: 140)),
+                padding: const EdgeInsets.only(right: 12),
+                child: Icon(Icons.chevron_right_rounded,
+                    size: 20, color: scheme.onSurface.withAlpha(100)),
               ),
             ],
           ),
@@ -907,6 +960,7 @@ class _CourseDiscoveryCardState extends State<_CourseDiscoveryCard> {
         .slideX(begin: 0.05, end: 0);
   }
 }
+
 
 // Popular course card (vertical, horizontal scroll)
 class _PopularCourseCard extends StatefulWidget {
@@ -929,8 +983,9 @@ class _PopularCourseCardState extends State<_PopularCourseCard> {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
     final course = widget.course;
 
     return GestureDetector(
@@ -941,79 +996,93 @@ class _PopularCourseCardState extends State<_PopularCourseCard> {
       child: AnimatedScale(
         duration: const Duration(milliseconds: 120),
         scale: _pressed ? 0.97 : 1.0,
-        child: SizedBox(
-          width: 220,
-          child: Container(
-            decoration: BoxDecoration(
-              color: scheme.surface,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: scheme.onSurface.withValues(alpha: 10)),
-              boxShadow: [
-                BoxShadow(
-                  color: theme.shadowColor.withValues(alpha: 8),
-                  blurRadius: 16,
-                  offset: const Offset(0, 6),
+        child: Container(
+          width: 280,
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: scheme.onSurface.withValues(alpha: 0.08)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.04),
+                blurRadius: 16,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              // Thumbnail
+              ClipRRect(
+                borderRadius: const BorderRadius.horizontal(left: Radius.circular(20)),
+                child: SizedBox(
+                  width: 100,
+                  height: 100,
+                  child: course.thumbnailUrl.isNotEmpty
+                      ? Image.network(
+                          course.thumbnailUrl,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => _ThumbPlaceholder(
+                              color: scheme.primary.withAlpha(20),
+                              icon: Icons.play_circle_outline_rounded,
+                              iconColor: scheme.primary),
+                        )
+                      : _ThumbPlaceholder(
+                          color: scheme.primary.withAlpha(20),
+                          icon: Icons.play_circle_outline_rounded,
+                          iconColor: scheme.primary),
                 ),
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Thumbnail
-                ClipRRect(
-                  borderRadius:
-                      const BorderRadius.vertical(top: Radius.circular(20)),
-                  child: SizedBox(
-                    height: 100,
-                    width: double.infinity,
-                    child: course.thumbnailUrl.isNotEmpty
-                        ? Image.network(
-                            course.thumbnailUrl,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => _ThumbPlaceholder(
-                                color: scheme.primary.withValues(alpha: 20),
-                                icon: Icons.play_circle_outline_rounded,
-                                iconColor: scheme.primary),
-                          )
-                        : _ThumbPlaceholder(
-                            color: scheme.primary.withValues(alpha: 20),
-                            icon: Icons.play_circle_outline_rounded,
-                            iconColor: scheme.primary),
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.all(12),
+              ),
+              // Content
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Text(
                         course.title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: GoogleFonts.inter(
-                            fontSize: 14, fontWeight: FontWeight.w700, color: const Color(0xFF1F2937)),
+                            fontSize: 14, fontWeight: FontWeight.w700, color: scheme.onSurface),
                       ),
-                      const SizedBox(height: 6),
+                      const SizedBox(height: 8),
                       Row(
                         children: [
-                          Icon(Icons.star_rounded,
-                              size: 14, color: LmsAdminTheme.coinGold),
-                          const SizedBox(width: 3),
+                          Icon(Icons.star_rounded, size: 14, color: LmsAdminTheme.coinGold),
+                          const SizedBox(width: 4),
                           Text(
                             course.rating.toStringAsFixed(1),
                             style: GoogleFonts.inter(
-                                fontSize: 12, fontWeight: FontWeight.w700, color: const Color(0xFF1F2937)),
+                                fontSize: 11, fontWeight: FontWeight.w700, color: scheme.onSurface),
                           ),
-                          const SizedBox(width: 10),
-                          Icon(Icons.people_alt_outlined,
-                              size: 14,
-                              color: const Color(0xFF9CA3AF)),
-                          const SizedBox(width: 3),
+                          const SizedBox(width: 12),
+                          Icon(Icons.people_alt_rounded,
+                              size: 14, color: scheme.onSurface.withAlpha(120)),
+                          const SizedBox(width: 4),
                           Text(
                             '${widget.studentCount}',
                             style: GoogleFonts.inter(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                              color: scheme.onSurface.withAlpha(140),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Icon(Icons.monetization_on_rounded, size: 14, color: LmsAdminTheme.coinGold),
+                          const SizedBox(width: 4),
+                          Text(
+                            course.price == 0 ? 'Free' : '₹${course.price.toStringAsFixed(0)}', 
+                            style: GoogleFonts.inter(
                               fontSize: 12,
-                              color: const Color(0xFF6B7280),
+                              fontWeight: FontWeight.w800,
+                              color: LmsAdminTheme.coinGold,
                             ),
                           ),
                         ],
@@ -1021,8 +1090,8 @@ class _PopularCourseCardState extends State<_PopularCourseCard> {
                     ],
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -1064,19 +1133,19 @@ class _EmptyState extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 24),
       child: Column(
         children: [
-          Icon(icon, size: 40, color: scheme.onSurface.withValues(alpha: 80)),
+          Icon(icon, size: 40, color: scheme.onSurface.withAlpha(80)),
           const SizedBox(height: 8),
           Text(message,
-              style: GoogleFonts.poppins(
+              style: GoogleFonts.inter(
                   fontWeight: FontWeight.w600,
-                  color: scheme.onSurface.withValues(alpha: 160))),
+                  color: scheme.onSurface.withAlpha(160))),
           if (sub != null) ...[
             const SizedBox(height: 4),
             Text(sub!,
                 textAlign: TextAlign.center,
-                style: GoogleFonts.poppins(
+                style: GoogleFonts.inter(
                     fontSize: 12,
-                    color: scheme.onSurface.withValues(alpha: 120))),
+                    color: scheme.onSurface.withAlpha(120))),
           ],
         ],
       ),
@@ -1098,7 +1167,7 @@ class _FilterSection extends StatelessWidget {
         Text(title,
             style: GoogleFonts.poppins(
                 fontSize: 13, fontWeight: FontWeight.w700,
-                color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 200))),
+                color: Theme.of(context).colorScheme.onSurface.withAlpha(200))),
         const SizedBox(height: 10),
         child,
       ],
@@ -1125,7 +1194,7 @@ class _FilterChip extends StatelessWidget {
           color: selected ? scheme.primary : scheme.surfaceContainerHighest,
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
-            color: selected ? scheme.primary : scheme.onSurface.withValues(alpha: 14),
+            color: selected ? scheme.primary : scheme.onSurface.withAlpha(14),
           ),
         ),
         child: Text(
@@ -1133,7 +1202,7 @@ class _FilterChip extends StatelessWidget {
           style: GoogleFonts.poppins(
             fontSize: 12,
             fontWeight: FontWeight.w700,
-            color: selected ? Colors.white : scheme.onSurface.withValues(alpha: 200),
+            color: selected ? Colors.white : scheme.onSurface.withAlpha(200),
           ),
         ),
       ),

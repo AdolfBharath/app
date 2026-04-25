@@ -161,7 +161,7 @@ class _BatchChatScreenState extends State<BatchChatScreen> {
                 style: GoogleFonts.poppins(
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
-                  color: scheme.onSurface.withValues(alpha: 170),
+                  color: scheme.onSurface.withAlpha(170),
                 ),
               ),
           ],
@@ -177,7 +177,7 @@ class _BatchChatScreenState extends State<BatchChatScreen> {
                 decoration: BoxDecoration(
                   color: scheme.errorContainer,
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: scheme.error.withValues(alpha: 45)),
+                  border: Border.all(color: scheme.error.withAlpha(45)),
                 ),
                 child: Row(
                   children: [
@@ -244,7 +244,7 @@ class _BatchChatScreenState extends State<BatchChatScreen> {
                                   Icon(
                                     Icons.forum_outlined,
                                     size: 42,
-                                    color: scheme.onSurface.withValues(alpha: 120),
+                                    color: scheme.onSurface.withAlpha(120),
                                   ),
                                   const SizedBox(height: 10),
                                   Text(
@@ -263,7 +263,7 @@ class _BatchChatScreenState extends State<BatchChatScreen> {
                                     style: GoogleFonts.poppins(
                                       fontSize: 12,
                                       fontWeight: FontWeight.w500,
-                                      color: scheme.onSurface.withValues(alpha: 170),
+                                      color: scheme.onSurface.withAlpha(170),
                                     ),
                                   ),
                                 ],
@@ -475,7 +475,7 @@ class _Composer extends StatelessWidget {
       decoration: BoxDecoration(
         color: scheme.surface,
         border: Border(
-          top: BorderSide(color: scheme.onSurface.withValues(alpha: 10)),
+          top: BorderSide(color: scheme.onSurface.withAlpha(10)),
         ),
       ),
       child: Column(
@@ -521,13 +521,13 @@ class _Composer extends StatelessWidget {
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(16),
                       borderSide: BorderSide(
-                        color: scheme.onSurface.withValues(alpha: 14),
+                        color: scheme.onSurface.withAlpha(14),
                       ),
                     ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(16),
                       borderSide: BorderSide(
-                        color: scheme.onSurface.withValues(alpha: 14),
+                        color: scheme.onSurface.withAlpha(14),
                       ),
                     ),
                   ),
@@ -611,8 +611,8 @@ class _PostCard extends StatelessWidget {
     final scheme = theme.colorScheme;
 
     final borderColor = isNew
-        ? scheme.primary.withValues(alpha: 90)
-        : scheme.onSurface.withValues(alpha: 14);
+        ? scheme.primary.withAlpha(90)
+        : scheme.onSurface.withAlpha(14);
 
     return Container(
       decoration: BoxDecoration(
@@ -621,7 +621,7 @@ class _PostCard extends StatelessWidget {
         border: Border.all(color: borderColor),
         boxShadow: [
           BoxShadow(
-            color: theme.shadowColor.withValues(alpha: 8),
+            color: theme.shadowColor.withAlpha(8),
             blurRadius: 14,
             offset: const Offset(0, 8),
           ),
@@ -653,7 +653,7 @@ class _PostCard extends StatelessWidget {
                         size: 22,
                         color: post.didUpvote
                             ? scheme.primary
-                            : scheme.onSurface.withValues(alpha: 170),
+                            : scheme.onSurface.withAlpha(170),
                       ),
                     ),
                     Text(
@@ -676,7 +676,7 @@ class _PostCard extends StatelessWidget {
                       children: [
                         CircleAvatar(
                           radius: 14,
-                          backgroundColor: scheme.primary.withValues(alpha: 14),
+                          backgroundColor: scheme.primary.withAlpha(14),
                           child: Icon(Icons.person_rounded, color: scheme.primary, size: 16),
                         ),
                         const SizedBox(width: 8),
@@ -703,12 +703,12 @@ class _PostCard extends StatelessWidget {
                             decoration: BoxDecoration(
                               color: roleLabel == 'ADMIN'
                                   ? scheme.errorContainer
-                                  : scheme.tertiary.withValues(alpha: 18),
+                                  : scheme.tertiary.withAlpha(18),
                               borderRadius: BorderRadius.circular(999),
                               border: Border.all(
                                 color: roleLabel == 'ADMIN'
-                                    ? scheme.error.withValues(alpha: 50)
-                                    : scheme.tertiary.withValues(alpha: 50),
+                                    ? scheme.error.withAlpha(50)
+                                    : scheme.tertiary.withAlpha(50),
                               ),
                             ),
                             child: Text(
@@ -727,7 +727,7 @@ class _PostCard extends StatelessWidget {
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                             decoration: BoxDecoration(
-                              color: scheme.primary.withValues(alpha: 16),
+                              color: scheme.primary.withAlpha(16),
                               borderRadius: BorderRadius.circular(999),
                             ),
                             child: Text(
@@ -748,7 +748,7 @@ class _PostCard extends StatelessWidget {
                       style: GoogleFonts.poppins(
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
-                        color: scheme.onSurface.withValues(alpha: 200),
+                        color: scheme.onSurface.withAlpha(200),
                       ),
                     ),
                   ],
@@ -776,7 +776,7 @@ class _PostCard extends StatelessWidget {
               fontSize: 13,
               fontWeight: FontWeight.w600,
               color: post.isDeleted
-                  ? scheme.onSurface.withValues(alpha: 215)
+                  ? scheme.onSurface.withAlpha(215)
                   : scheme.onSurface,
             ),
           ),
@@ -795,7 +795,7 @@ class _PostCard extends StatelessWidget {
                   style: GoogleFonts.poppins(
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
-                    color: scheme.onSurface.withValues(alpha: 200),
+                    color: scheme.onSurface.withAlpha(200),
                   ),
                 ),
             ],
@@ -825,13 +825,13 @@ class _PostCard extends StatelessWidget {
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(14),
                                 borderSide: BorderSide(
-                                  color: scheme.onSurface.withValues(alpha: 14),
+                                  color: scheme.onSurface.withAlpha(14),
                                 ),
                               ),
                               enabledBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(14),
                                 borderSide: BorderSide(
-                                  color: scheme.onSurface.withValues(alpha: 14),
+                                  color: scheme.onSurface.withAlpha(14),
                                 ),
                               ),
                             ),
@@ -871,7 +871,7 @@ class _PostCard extends StatelessWidget {
                       color: scheme.surfaceContainerHighest,
                       borderRadius: BorderRadius.circular(14),
                       border: Border.all(
-                        color: scheme.onSurface.withValues(alpha: 12),
+                        color: scheme.onSurface.withAlpha(12),
                       ),
                     ),
                     child: Row(
@@ -915,7 +915,7 @@ class _PostCard extends StatelessWidget {
                                       decoration: BoxDecoration(
                                         color: replyRoleLabel == 'ADMIN'
                                             ? scheme.errorContainer
-                                            : scheme.tertiary.withValues(alpha: 18),
+                                            : scheme.tertiary.withAlpha(18),
                                         borderRadius: BorderRadius.circular(999),
                                       ),
                                       child: Text(
@@ -956,7 +956,7 @@ class _PostCard extends StatelessWidget {
                                 style: GoogleFonts.poppins(
                                   fontSize: 10,
                                   fontWeight: FontWeight.w600,
-                                  color: scheme.onSurface.withValues(alpha: 170),
+                                  color: scheme.onSurface.withAlpha(170),
                                 ),
                               ),
                               const SizedBox(height: 2),
@@ -966,7 +966,7 @@ class _PostCard extends StatelessWidget {
                                   fontWeight: FontWeight.w600,
                                   fontSize: 12,
                                   color: r.isDeleted
-                                      ? scheme.onSurface.withValues(alpha: 215)
+                                      ? scheme.onSurface.withAlpha(215)
                                       : scheme.onSurface,
                                 ),
                               ),

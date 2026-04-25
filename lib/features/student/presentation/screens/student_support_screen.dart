@@ -81,7 +81,7 @@ class _StudentSupportScreenState extends State<StudentSupportScreen> {
                 style: GoogleFonts.poppins(
                   fontSize: 12,
                   fontWeight: FontWeight.w500,
-                  color: scheme.onSurface.withValues(alpha: 160),
+                  color: scheme.onSurface.withAlpha(160),
                 ),
               ),
               const SizedBox(height: 14),
@@ -91,11 +91,11 @@ class _StudentSupportScreenState extends State<StudentSupportScreen> {
                   color: scheme.surface,
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(
-                    color: scheme.onSurface.withValues(alpha: 12),
+                    color: scheme.onSurface.withAlpha(12),
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: theme.shadowColor.withValues(alpha: 10),
+                      color: theme.shadowColor.withAlpha(10),
                       blurRadius: 16,
                       offset: const Offset(0, 8),
                     ),
@@ -124,26 +124,26 @@ class _StudentSupportScreenState extends State<StudentSupportScreen> {
                         hintText: 'Type your message...',
                         hintStyle: GoogleFonts.poppins(
                           fontWeight: FontWeight.w500,
-                          color: scheme.onSurface.withValues(alpha: 235),
+                          color: scheme.onSurface.withAlpha(235),
                         ),
                         filled: true,
                         fillColor: scheme.surfaceContainerHighest,
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(16),
                           borderSide: BorderSide(
-                            color: scheme.onSurface.withValues(alpha: 12),
+                            color: scheme.onSurface.withAlpha(12),
                           ),
                         ),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(16),
                           borderSide: BorderSide(
-                            color: scheme.onSurface.withValues(alpha: 12),
+                            color: scheme.onSurface.withAlpha(12),
                           ),
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(16),
                           borderSide: BorderSide(
-                            color: scheme.primary.withValues(alpha: 60),
+                            color: scheme.primary.withAlpha(60),
                           ),
                         ),
                       ),
@@ -175,7 +175,7 @@ class _StudentSupportScreenState extends State<StudentSupportScreen> {
                   color: scheme.surface,
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(
-                    color: scheme.onSurface.withValues(alpha: 12),
+                    color: scheme.onSurface.withAlpha(12),
                   ),
                 ),
                 child: Column(
@@ -198,7 +198,7 @@ class _StudentSupportScreenState extends State<StudentSupportScreen> {
                             'Admin Email: support@jenovate.com',
                             style: GoogleFonts.poppins(
                               fontSize: 12,
-                              color: scheme.onSurface.withValues(alpha: 160),
+                              color: scheme.onSurface.withAlpha(160),
                             ),
                           ),
                         ),
@@ -214,7 +214,7 @@ class _StudentSupportScreenState extends State<StudentSupportScreen> {
                             'Phone: +91 00000 00000',
                             style: GoogleFonts.poppins(
                               fontSize: 12,
-                              color: scheme.onSurface.withValues(alpha: 160),
+                              color: scheme.onSurface.withAlpha(160),
                             ),
                           ),
                         ),

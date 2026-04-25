@@ -6,6 +6,7 @@ import '../../../../models/user.dart';
 import '../../../../providers/auth_provider.dart';
 import '../../../../screens/login_screen.dart';
 import '../widgets/animated_teacher_widget.dart';
+import '../../../../config/theme.dart';
 
 class MentorProfileScreen extends StatelessWidget {
   const MentorProfileScreen({super.key, required this.username});
@@ -26,32 +27,47 @@ class MentorProfileScreen extends StatelessWidget {
 
     return SafeArea(
       child: Scaffold(
-        backgroundColor: Colors.white,
+        backgroundColor: LmsAdminTheme.backgroundLight,
         body: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
+                  Container(
+                    margin: const EdgeInsets.only(top: 4),
+                    width: 4,
+                    height: 30,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF3B82F6),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      IconButton(
-                        icon: const Icon(Icons.arrow_back_ios_new, size: 18),
-                        onPressed: () => Navigator.of(context).maybePop(),
-                      ),
-                      const SizedBox(width: 4),
                       Text(
-                        'Profile',
+                        'Mentor Profile',
                         style: GoogleFonts.poppins(
-                          fontSize: 26,
+                          fontSize: 20,
                           fontWeight: FontWeight.w700,
-                          color: const Color(0xFF0F172A),
+                          color: LmsAdminTheme.textDark,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Account & preferences',
+                        style: GoogleFonts.poppins(
+                          fontSize: 12,
+                          color: const Color(0xFF94A3B8),
                         ),
                       ),
                     ],
                   ),
+                  const Spacer(),
                   IconButton(
                     icon: const Icon(Icons.logout_rounded),
                     onPressed: () {
@@ -65,21 +81,10 @@ class MentorProfileScreen extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 32),
               Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
-                  borderRadius: BorderRadius.circular(18),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.02),
-                      blurRadius: 4,
-                      offset: const Offset(0, 1),
-                    ),
-                  ],
-                ),
+                padding: const EdgeInsets.all(20),
+                decoration: LmsAdminTheme.adminCardDecoration(context),
                 child: Row(
                   children: [
                     Container(

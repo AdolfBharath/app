@@ -1,13 +1,16 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../config/theme.dart';
-import '../../../../models/course.dart';
+import '../../../../models/shop_item.dart';
 import '../../../../providers/auth_provider.dart';
-import '../../../../providers/course_provider.dart';
-import '../../../../services/api_service.dart';
+import '../../../../providers/shop_provider.dart';
 import '../providers/student_nav_provider.dart';
 import '../providers/student_provider.dart';
 import '../widgets/student_header_row.dart';
@@ -24,17 +27,37 @@ class StudentShopScreen extends StatefulWidget {
 class _StudentShopScreenState extends State<StudentShopScreen> {
   int _selectedFilter = 0;
   final _filters = const ['All Items', 'Courses', 'Merchandise'];
+  final _searchController = TextEditingController();
+  Timer? _syncTimer;
 
-  Future<void> _buyCourse(BuildContext context, Course course) async {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      context.read<ShopProvider>().fetchShopItems();
+      _syncTimer = Timer.periodic(const Duration(seconds: 20), (_) {
+        if (!mounted) return;
+        context.read<ShopProvider>().fetchShopItems();
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _syncTimer?.cancel();
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _buyItem(BuildContext context, ShopItem item) async {
     final scheme = Theme.of(context).colorScheme;
-    final auth = context.read<AuthProvider>();
     final student = context.read<StudentProvider>();
-    final courses = context.read<CourseProvider>();
+    final shop = context.read<ShopProvider>();
 
-    final costCoins = course.price.round();
+    final costCoins = item.price;
     if (costCoins > 0) {
-      final ok = await student.spendCoins(costCoins);
-      if (!ok) {
+      if (student.coins < costCoins) {
         if (!context.mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -47,25 +70,24 @@ class _StudentShopScreenState extends State<StudentShopScreen> {
     }
 
     try {
-      await ApiService.instance.enrollInCourse(course.id);
-      await auth.refreshCurrentUser();
+      final remainingCoins = await shop.purchaseItem(item.id);
+      if (remainingCoins == null) {
+        throw Exception(shop.errorMessage ?? 'Purchase failed');
+      }
+
+      await student.setCoins(remainingCoins);
       if (!context.mounted) return;
 
-      final assignedCourseIds = auth.currentUser?.courseIds ?? const <String>[];
-      await student.fetchCourses(assignedCourseIds: assignedCourseIds);
-      await courses.loadCourses();
+      await shop.fetchShopItems();
 
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Enrolled in ${course.title}')),
+        SnackBar(content: Text('Purchased ${item.name}')),
       );
     } catch (e) {
-      if (costCoins > 0) {
-        await student.addCoins(costCoins);
-      }
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Enroll failed: $e')),
+        SnackBar(content: Text('Purchase failed: $e')),
       );
     }
   }
@@ -76,227 +98,146 @@ class _StudentShopScreenState extends State<StudentShopScreen> {
     final scheme = theme.colorScheme;
     final auth = context.watch<AuthProvider>();
     final student = context.watch<StudentProvider>();
-    final username =
-        auth.currentUser?.username ?? auth.currentUser?.name ?? 'Student';
+    final shop = context.watch<ShopProvider>();
+    
+    final username = auth.currentUser?.username ?? auth.currentUser?.name ?? 'Student';
+    
+    // Background color strictly light/pastel as requested
+    const bgColor = Color(0xFFF5F7FA);
 
     return Scaffold(
-      backgroundColor: theme.scaffoldBackgroundColor,
+      backgroundColor: bgColor,
       body: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ── Header + hero card ──────────────────────────
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
-              child: Column(
-                children: [
-                  StudentHeaderRow(
-                    onNotificationsTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(
-                          builder: (_) => const StudentNotificationsScreen()),
+        child: CustomScrollView(
+          physics: const BouncingScrollPhysics(),
+          slivers: [
+            // ── Header ──────────────────────────
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+                child: Column(
+                  children: [
+                    StudentHeaderRow(
+                      onNotificationsTap: () => Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const StudentNotificationsScreen()),
+                      ),
+                      onProfileTap: () => context.read<StudentNavProvider>().setIndex(4),
                     ),
-                    onProfileTap: () =>
-                        context.read<StudentNavProvider>().setIndex(4),
-                  ),
-                  const SizedBox(height: 14),
-                  StudentHeroCard(
-                    username: username,
-                    subtitle: 'Redeem coins for courses & merchandise',
-                    coins: student.coins,
-                    streakDays: student.streakCount,
-                    gender: student.gender,
-                    profileImageBytes: student.profileImageBytes,
-                  ).animate().fadeIn(duration: 300.ms),
-                  const SizedBox(height: 14),
-
-                  // ── Promo banner ──────────────────────────
-                  _PromoBanner(),
-                  const SizedBox(height: 14),
-
-                  // ── Filter chips ──────────────────────────
-                  SizedBox(
-                    height: 40,
-                    child: ListView.separated(
-                      scrollDirection: Axis.horizontal,
-                      itemCount: _filters.length,
-                      separatorBuilder: (_, __) => const SizedBox(width: 8),
-                      itemBuilder: (context, i) => _ShopFilterChip(
-                        label: _filters[i],
-                        selected: _selectedFilter == i,
-                        onTap: () => setState(() => _selectedFilter = i),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-
-                  // ── Section header ────────────────────────
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text('Available Courses',
-                            style: theme.textTheme.titleSmall),
-                      ),
-                      Icon(Icons.local_offer_outlined,
-                          size: 14,
-                          color: scheme.onSurface.withValues(alpha: 160)),
-                      const SizedBox(width: 4),
-                      Consumer2<CourseProvider, StudentProvider>(
-                        builder: (_, courseP, studentP, __) {
-                          final count = courseP.courses
-                              .where((c) => !studentP.enrolledCourses
-                                  .any((e) => e.id == c.id))
-                              .length;
-                          return Text(
-                            '$count Items',
-                            style: GoogleFonts.inter(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              color: scheme.onSurface.withValues(alpha: 160),
-                            ),
-                          );
-                        },
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 10),
-
-            // ── Shop grid ─────────────────────────────────────
-            Expanded(
-              child: Consumer2<CourseProvider, StudentProvider>(
-                builder: (context, courseProvider, studentP, _) {
-                  final available = courseProvider.courses
-                      .where((c) =>
-                          !studentP.enrolledCourses.any((e) => e.id == c.id))
-                      .toList();
-
-                  if (available.isEmpty) {
-                    return Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.shopping_bag_outlined,
-                              size: 48,
-                              color: scheme.onSurface.withValues(alpha: 80)),
-                          const SizedBox(height: 12),
-                          Text(
-                            'Nothing to purchase right now',
-                            style: GoogleFonts.inter(
-                              fontWeight: FontWeight.w600,
-                              color: scheme.onSurface.withValues(alpha: 160),
-                            ),
+                    const SizedBox(height: 20),
+                    
+                    // ── Search Bar ──────────────────────────
+                    Container(
+                      height: 52,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(100),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.04),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
                           ),
                         ],
                       ),
-                    );
-                  }
+                      child: TextField(
+                        controller: _searchController,
+                        style: GoogleFonts.poppins(fontSize: 14, color: const Color(0xFF1A1A1A)),
+                        decoration: InputDecoration(
+                          hintText: 'Search marketplace...',
+                          hintStyle: GoogleFonts.poppins(fontSize: 14, color: const Color(0xFF9CA3AF)),
+                          prefixIcon: const Icon(Icons.search_rounded, color: Color(0xFF3B82F6), size: 22),
+                          suffixIcon: Container(
+                            margin: const EdgeInsets.all(8),
+                            decoration: const BoxDecoration(
+                              color: Color(0xFFF0F7FF),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.tune_rounded, size: 18, color: Color(0xFF3B82F6)),
+                          ),
+                          border: InputBorder.none,
+                          contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                        ),
+                      ),
+                    ).animate().fadeIn(duration: 400.ms).slideY(begin: 0.1, end: 0),
+                    
+                    const SizedBox(height: 20),
+                    
+                    StudentHeroCard(
+                      username: username,
+                      subtitle: 'Redeem coins for courses & merchandise',
+                      coins: student.coins,
+                      streakDays: student.streakCount,
+                      gender: student.gender,
+                      profileImageBytes: student.profileImageBytes,
+                    ).animate().fadeIn(duration: 300.ms),
+                    
+                    const SizedBox(height: 24),
 
-                  return GridView.builder(
-                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 100),
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      crossAxisSpacing: 12,
-                      mainAxisSpacing: 12,
-                      childAspectRatio: 0.78,
+                    // ── Filter chips (Rounded Pills) ──────────────────────────
+                    SizedBox(
+                      height: 44,
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: _filters.length,
+                        separatorBuilder: (_, __) => const SizedBox(width: 10),
+                        itemBuilder: (context, i) => _ShopFilterChip(
+                          label: _filters[i],
+                          selected: _selectedFilter == i,
+                          onTap: () => setState(() => _selectedFilter = i),
+                        ),
+                      ),
                     ),
-                    itemCount: available.length,
-                    itemBuilder: (context, index) {
-                      final course = available[index];
-                      final priceCoins = course.price.round();
-                      return _ShopCard(
-                        course: course,
-                        priceCoins: priceCoins,
-                        index: index,
-                        coins: studentP.coins,
-                        onBuy: () {
-                          _buyCourse(context, course);
-                        },
-                      );
-                    },
-                  );
-                },
+                    const SizedBox(height: 16),
+                  ],
+                ),
               ),
             ),
+
+            // ── Items List ──────────────────────────
+            if (shop.isLoading)
+              const SliverFillRemaining(
+                child: Center(child: CircularProgressIndicator(color: Color(0xFF3B82F6))),
+              )
+            else if (shop.items.isEmpty)
+              SliverFillRemaining(
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.shopping_bag_outlined, size: 64, color: Colors.grey.shade300),
+                      const SizedBox(height: 16),
+                      Text(
+                        'No items found',
+                        style: GoogleFonts.poppins(fontSize: 16, color: Colors.grey.shade500),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            else
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+                sliver: SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                    (context, i) {
+                      final item = shop.items[i];
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 16),
+                        child: _ShopCard(
+                          item: item,
+                          priceCoins: item.price,
+                          index: i,
+                          coins: student.coins,
+                          onBuy: () => _buyItem(context, item),
+                        ),
+                      );
+                    },
+                    childCount: shop.items.length,
+                  ),
+                ),
+              ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-// ─── Promo banner ─────────────────────────────────────────────────────────────
-class _PromoBanner extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    final gradColors = LmsStudentTheme.heroGradientFor(context);
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: gradColors,
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: gradColors[0].withValues(alpha: 60),
-            blurRadius: 18,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 28),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    '🎉 Special Offer',
-                    style: GoogleFonts.inter(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Gear Up for Success!',
-                  style: GoogleFonts.inter(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800,
-                    color: Colors.white,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Use reward coins for courses & merch',
-                  style: GoogleFonts.inter(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.white.withValues(alpha: 210),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 10),
-          Icon(Icons.local_fire_department_rounded,
-              color: LmsAdminTheme.coinGold, size: 40),
-        ],
       ),
     );
   }
@@ -316,35 +257,44 @@ class _ShopFilterChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
         decoration: BoxDecoration(
-          color: selected ? scheme.primary : scheme.surface,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color:
-                selected ? scheme.primary : scheme.onSurface.withValues(alpha: 14),
-          ),
-          boxShadow: selected
-              ? [
-                  BoxShadow(
-                    color: scheme.primary.withValues(alpha: 40),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  )
-                ]
-              : [],
+          gradient: selected
+              ? const LinearGradient(
+                  colors: [Color(0xFF3B82F6), Color(0xFF2563EB)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                )
+              : null,
+          color: selected ? null : Colors.white,
+          borderRadius: BorderRadius.circular(100),
+          boxShadow: [
+            if (selected)
+              BoxShadow(
+                color: const Color(0xFF3B82F6).withValues(alpha: 0.3),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              )
+            else
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.02),
+                blurRadius: 4,
+                offset: const Offset(0, 2),
+              ),
+          ],
         ),
-        child: Text(
-          label,
-          style: GoogleFonts.inter(
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
-            color: selected ? Colors.white : scheme.onSurface.withValues(alpha: 200),
+        child: Center(
+          child: Text(
+            label,
+            style: GoogleFonts.poppins(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: selected ? Colors.white : const Color(0xFF6B7280),
+            ),
           ),
         ),
       ),
@@ -352,17 +302,17 @@ class _ShopFilterChip extends StatelessWidget {
   }
 }
 
-// ─── Shop item card ───────────────────────────────────────────────────────────
+// ─── Shop item card (Horizontal Layout) ───────────────────────────────────────
 class _ShopCard extends StatefulWidget {
   const _ShopCard({
-    required this.course,
+    required this.item,
     required this.priceCoins,
     required this.index,
     required this.coins,
     required this.onBuy,
   });
 
-  final Course course;
+  final ShopItem item;
   final int priceCoins;
   final int index;
   final int coins;
@@ -377,8 +327,6 @@ class _ShopCardState extends State<_ShopCard> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
     final canAfford = widget.coins >= widget.priceCoins;
 
     return GestureDetector(
@@ -388,86 +336,89 @@ class _ShopCardState extends State<_ShopCard> {
       onTap: widget.onBuy,
       child: AnimatedScale(
         duration: const Duration(milliseconds: 120),
-        scale: _pressed ? 0.97 : 1.0,
+        scale: _pressed ? 0.98 : 1.0,
         child: Container(
+          height: 120,
+          padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: scheme.surface,
+            color: Colors.white,
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: scheme.onSurface.withValues(alpha: 10)),
             boxShadow: [
               BoxShadow(
-                color: theme.shadowColor.withValues(alpha: 8),
-                blurRadius: 14,
+                color: Colors.black.withValues(alpha: 0.03),
+                blurRadius: 15,
                 offset: const Offset(0, 5),
               ),
             ],
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          child: Row(
             children: [
-              // Thumbnail
-              Expanded(
+              // Thumbnail Left
+              Hero(
+                tag: 'shop_item_${widget.item.id}',
                 child: ClipRRect(
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-                  child: SizedBox(
-                    width: double.infinity,
-                    child: widget.course.thumbnailUrl.isNotEmpty
-                        ? Image.network(
-                            widget.course.thumbnailUrl,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => _ShopThumbnailPlaceholder(
-                              color: scheme.primary,
-                            ),
-                          )
-                        : _ShopThumbnailPlaceholder(color: scheme.primary),
+                  borderRadius: BorderRadius.circular(16),
+                  child: AspectRatio(
+                    aspectRatio: 1,
+                    child: Container(
+                      color: const Color(0xFFF8FAFF),
+                      child: widget.item.imageUrl.isNotEmpty
+                          ? _ShopImage(imageUrl: widget.item.imageUrl)
+                          : _ShopThumbnailPlaceholder(),
+                    ),
                   ),
                 ),
               ),
-              // Info
-              Padding(
-                padding: const EdgeInsets.fromLTRB(11, 9, 11, 11),
+              const SizedBox(width: 16),
+              
+              // Info Right
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      widget.course.title,
+                      widget.item.name,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.inter(
-                          fontSize: 11, fontWeight: FontWeight.w700),
+                      style: GoogleFonts.poppins(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFF1A1A1A),
+                      ),
                     ),
-                    const SizedBox(height: 7),
+                    const Spacer(),
                     Row(
                       children: [
-                        Icon(Icons.monetization_on_rounded,
-                            size: 14, color: LmsAdminTheme.coinGold),
-                        const SizedBox(width: 4),
+                        Icon(Icons.stars_rounded, size: 18, color: LmsAdminTheme.coinGold),
+                        const SizedBox(width: 6),
                         Text(
                           '${widget.priceCoins}',
-                          style: GoogleFonts.inter(
-                            fontSize: 12,
+                          style: GoogleFonts.poppins(
+                            fontSize: 16,
                             fontWeight: FontWeight.w800,
                             color: LmsAdminTheme.coinGold,
                           ),
                         ),
                         const Spacer(),
-                        GestureDetector(
-                          onTap: widget.onBuy,
-                          child: Container(
-                            width: 30,
-                            height: 30,
-                            decoration: BoxDecoration(
-                              color: canAfford
-                                  ? scheme.primary
-                                  : scheme.onSurface.withValues(alpha: 14),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Icon(
-                              Icons.add_rounded,
-                              color: canAfford
-                                  ? Colors.white
-                                  : scheme.onSurface.withValues(alpha: 100),
-                              size: 18,
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          decoration: BoxDecoration(
+                            gradient: canAfford
+                                ? const LinearGradient(
+                                    colors: [Color(0xFF3B82F6), Color(0xFF2563EB)],
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                  )
+                                : null,
+                            color: canAfford ? null : const Color(0xFFF3F4F6),
+                            borderRadius: BorderRadius.circular(100),
+                          ),
+                          child: Text(
+                            'Redeem',
+                            style: GoogleFonts.poppins(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: canAfford ? Colors.white : const Color(0xFF9CA3AF),
                             ),
                           ),
                         ),
@@ -480,25 +431,54 @@ class _ShopCardState extends State<_ShopCard> {
           ),
         ),
       ),
-    )
-        .animate(delay: Duration(milliseconds: widget.index * 50))
-        .fadeIn(duration: 280.ms)
-        .scale(begin: const Offset(0.96, 0.96), end: const Offset(1, 1));
+    ).animate(delay: Duration(milliseconds: widget.index * 60))
+        .fadeIn(duration: 400.ms)
+        .slideX(begin: 0.1, end: 0);
+  }
+}
+
+class _ShopImage extends StatelessWidget {
+  _ShopImage({required this.imageUrl});
+
+  final String imageUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    if (imageUrl.startsWith('data:image/')) {
+      final bytes = _decodeDataUrl(imageUrl);
+      if (bytes != null && bytes.isNotEmpty) {
+        return Image.memory(bytes, fit: BoxFit.cover, errorBuilder: (_, __, ___) => _ShopThumbnailPlaceholder());
+      }
+      return _ShopThumbnailPlaceholder();
+    }
+
+    return Image.network(
+      imageUrl,
+      fit: BoxFit.cover,
+      errorBuilder: (_, __, ___) => _ShopThumbnailPlaceholder(),
+    );
+  }
+
+  Uint8List? _decodeDataUrl(String input) {
+    final comma = input.indexOf(',');
+    if (comma < 0 || comma + 1 >= input.length) return null;
+    try {
+      return base64Decode(input.substring(comma + 1));
+    } catch (_) {
+      return null;
+    }
   }
 }
 
 class _ShopThumbnailPlaceholder extends StatelessWidget {
-  const _ShopThumbnailPlaceholder({required this.color});
-
-  final Color color;
+  _ShopThumbnailPlaceholder();
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: color.withValues(alpha: 18),
-      child: Center(
-        child: Icon(Icons.play_lesson_outlined,
-            color: color.withValues(alpha: 160), size: 32),
+      color: const Color(0xFF3B82F6).withValues(alpha: 0.05),
+      child: const Center(
+        child: Icon(Icons.shopping_bag_outlined, color: Color(0xFF3B82F6), size: 28),
       ),
     );
   }

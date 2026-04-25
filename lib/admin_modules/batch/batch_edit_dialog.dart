@@ -54,10 +54,12 @@ class _BatchEditDialogState extends State<BatchEditDialog> {
         capacity: int.tryParse(_descriptionController.text.trim()),
       );
       if (!mounted) return;
-      Navigator.of(context).pop();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Batch updated', style: GoogleFonts.poppins())),
-      );
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Batch updated', style: GoogleFonts.poppins())),
+        );
+        Navigator.of(context).pop();
+      }
       widget.onSave();
     } catch (e) {
       if (!mounted) return;

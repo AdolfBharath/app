@@ -31,7 +31,7 @@ class StudentChatScreen extends StatelessWidget {
                   'Course guidance • App help • Personalized suggestions',
                   style: GoogleFonts.poppins(
                     fontSize: 12,
-                    color: theme.colorScheme.onSurface.withValues(alpha: 153),
+                    color: theme.colorScheme.onSurface.withAlpha(153),
                   ),
                 ),
               ),
@@ -41,7 +41,7 @@ class StudentChatScreen extends StatelessWidget {
                 child: Text(
                   'AI chat UI (placeholder)',
                   style: GoogleFonts.poppins(
-                    color: theme.colorScheme.onSurface.withValues(alpha: 235),
+                    color: theme.colorScheme.onSurface.withAlpha(235),
                   ),
                 ),
               ),
@@ -59,13 +59,13 @@ class StudentChatScreen extends StatelessWidget {
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(20),
                           borderSide: BorderSide(
-                            color: theme.colorScheme.onSurface.withValues(alpha: 20),
+                            color: theme.colorScheme.onSurface.withAlpha(20),
                           ),
                         ),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(20),
                           borderSide: BorderSide(
-                            color: theme.colorScheme.onSurface.withValues(alpha: 20),
+                            color: theme.colorScheme.onSurface.withAlpha(20),
                           ),
                         ),
                         contentPadding: const EdgeInsets.symmetric(

@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../models/batch.dart';
 import '../shared/index.dart';
+import '../../features/student/presentation/screens/batch_chat_screen.dart';
 
 /// View dialog for displaying batch details
 class BatchViewDialog extends StatelessWidget {
@@ -37,6 +38,19 @@ class BatchViewDialog extends StatelessWidget {
         ),
       ),
       actions: [
+        TextButton(
+          onPressed: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => BatchChatScreen(
+                  batchId: batch.id,
+                  batchName: batch.name,
+                ),
+              ),
+            );
+          },
+          child: Text('View Chat', style: GoogleFonts.poppins(color: const Color(0xFF8B5CF6))),
+        ),
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
           child: Text('Close', style: GoogleFonts.poppins()),

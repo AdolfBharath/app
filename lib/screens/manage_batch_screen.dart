@@ -14,6 +14,7 @@ import '../providers/course_provider.dart';
 import '../services/api_service.dart';
 import 'add_batch_screen.dart';
 import 'batch_details_screen.dart';
+import '../features/student/presentation/screens/batch_chat_screen.dart';
 
 class ManageBatchScreen extends StatefulWidget {
   const ManageBatchScreen({super.key});
@@ -152,7 +153,7 @@ class _ManageBatchScreenState extends State<ManageBatchScreen> {
                             highlightColor: Colors.white,
                             child: Container(
                               height: 160,
-                              decoration: LmsAdminTheme.adminCardDecoration,
+                              decoration: LmsAdminTheme.adminCardDecoration(context),
                             ),
                           );
                         },
@@ -416,7 +417,7 @@ class _BatchCard extends StatelessWidget {
 
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: LmsAdminTheme.adminCardDecoration,
+      decoration: LmsAdminTheme.adminCardDecoration(context),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -602,6 +603,23 @@ class _BatchCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
+              _CardActionButton(
+                icon: Icons.forum_outlined,
+                label: 'Chat',
+                color: const Color(0xFF8B5CF6),
+                filled: false,
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => BatchChatScreen(
+                        batchId: batch.id,
+                        batchName: batch.name,
+                      ),
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(width: 8),
               _CardActionButton(
                 icon: Icons.edit_outlined,
                 label: 'Edit Batch',

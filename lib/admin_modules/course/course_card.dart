@@ -25,7 +25,7 @@ class CourseCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: LmsAdminTheme.adminCardDecoration,
+      decoration: LmsAdminTheme.adminCardDecoration(context),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

@@ -25,11 +25,11 @@ class StudentAnimatedAvatar extends StatelessWidget {
         : 'assets/avatars/male.png';
 
     final bg = onPrimaryContext
-        ? Colors.white.withValues(alpha: 36)
-        : scheme.primary.withValues(alpha: 12);
+        ? Colors.white.withAlpha(36)
+        : scheme.primary.withAlpha(12);
     final borderColor = onPrimaryContext
-        ? Colors.white.withValues(alpha: 60)
-        : scheme.primary.withValues(alpha: 30);
+        ? Colors.white.withAlpha(60)
+        : scheme.primary.withAlpha(30);
 
     final avatar = Container(
       width: size,
@@ -64,7 +64,7 @@ class StudentAnimatedAvatar extends StatelessWidget {
                           : Icons.face_outlined,
                       size: size * 0.5,
                       color: onPrimaryContext
-                          ? Colors.white.withValues(alpha: 220)
+                          ? Colors.white.withAlpha(220)
                           : scheme.primary,
                     ),
                   );

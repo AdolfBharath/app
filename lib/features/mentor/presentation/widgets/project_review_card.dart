@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../providers/mentor_provider.dart';
+import '../../../../config/theme.dart';
 
 class ProjectReviewCard extends StatelessWidget {
   const ProjectReviewCard({super.key, required this.project});
@@ -27,19 +28,8 @@ class ProjectReviewCard extends StatelessWidget {
     }
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.02),
-            blurRadius: 4,
-            offset: const Offset(0, 1),
-          ),
-        ],
-      ),
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: LmsAdminTheme.adminCardDecoration(context),
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(

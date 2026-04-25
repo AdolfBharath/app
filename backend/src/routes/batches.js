@@ -17,11 +17,7 @@ router.get('/', async (_req, res) => {
       SELECT
         b.*,
         COALESCE(ec.enrolled_count, 0)::int AS enrolled_count,
-        CASE
-          WHEN b.capacity IS NOT NULL AND b.capacity > 0
-            THEN LEAST(1.0, COALESCE(ec.enrolled_count, 0)::double precision / b.capacity::double precision)
-          ELSE 0.0
-        END AS progress
+        COALESCE(lp.avg_progress, 0)::double precision AS progress
       FROM batches b
       LEFT JOIN (
         SELECT
@@ -30,6 +26,22 @@ router.get('/', async (_req, res) => {
         FROM batch_students bs
         GROUP BY bs.batch_id
       ) ec ON ec.batch_id = b.id
+      LEFT JOIN (
+        SELECT 
+          bs.batch_id,
+          AVG(
+            CASE 
+              WHEN jsonb_array_length(c.modules) = 0 THEN 0
+              ELSE (jsonb_array_length(COALESCE(scp.completed_lessons, '[]'::jsonb))::float / 
+                    GREATEST(1, jsonb_array_length(c.modules))::float)
+            END
+          ) as avg_progress
+        FROM batch_students bs
+        JOIN batches b2 ON b2.id = bs.batch_id
+        JOIN courses c ON c.id = b2.course_id
+        LEFT JOIN student_course_progress scp ON scp.student_id = bs.student_id AND scp.course_id = b2.course_id
+        GROUP BY bs.batch_id
+      ) lp ON lp.batch_id = b.id
       ORDER BY b.created_at DESC
     `);
     return res.json(result.rows);
@@ -216,11 +228,7 @@ router.get('/:id/details', async (req, res) => {
         m.email AS mentor_email,
         m.username AS mentor_username,
         COALESCE(bs_count.enrolled_count, 0)::int AS enrolled_count,
-        CASE
-          WHEN b.capacity IS NOT NULL AND b.capacity > 0
-            THEN LEAST(1.0, COALESCE(bs_count.enrolled_count, 0)::double precision / b.capacity::double precision)
-          ELSE 0.0
-        END AS progress
+        COALESCE(lp.avg_progress, 0)::double precision AS progress
       FROM batches b
       LEFT JOIN courses c ON c.id = b.course_id
       LEFT JOIN users m ON m.id = b.mentor_id
@@ -229,6 +237,22 @@ router.get('/:id/details', async (req, res) => {
         FROM batch_students
         GROUP BY batch_id
       ) bs_count ON bs_count.batch_id = b.id
+      LEFT JOIN (
+        SELECT 
+          bs.batch_id,
+          AVG(
+            CASE 
+              WHEN jsonb_array_length(c.modules) = 0 THEN 0
+              ELSE (jsonb_array_length(COALESCE(scp.completed_lessons, '[]'::jsonb))::float / 
+                    GREATEST(1, jsonb_array_length(c.modules))::float)
+            END
+          ) as avg_progress
+        FROM batch_students bs
+        JOIN batches b2 ON b2.id = bs.batch_id
+        JOIN courses c ON c.id = b2.course_id
+        LEFT JOIN student_course_progress scp ON scp.student_id = bs.student_id AND scp.course_id = b2.course_id
+        GROUP BY bs.batch_id
+      ) lp ON lp.batch_id = b.id
       WHERE b.id = $1
       `,
       [id],

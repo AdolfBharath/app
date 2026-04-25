@@ -38,7 +38,7 @@ class StudentNotificationsScreen extends StatelessWidget {
                       child: Text(
                         'No notifications yet',
                         style: GoogleFonts.poppins(
-                          color: scheme.onSurface.withValues(alpha: 235),
+                          color: scheme.onSurface.withAlpha(235),
                         ),
                       ),
                     ),
@@ -58,11 +58,11 @@ class StudentNotificationsScreen extends StatelessWidget {
                       color: scheme.surface,
                       borderRadius: BorderRadius.circular(18),
                       border: Border.all(
-                        color: scheme.onSurface.withValues(alpha: 12),
+                        color: scheme.onSurface.withAlpha(12),
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: theme.shadowColor.withValues(alpha: 10),
+                          color: theme.shadowColor.withAlpha(10),
                           blurRadius: 10,
                           offset: Offset(0, 4),
                         ),
@@ -76,15 +76,15 @@ class StudentNotificationsScreen extends StatelessWidget {
                           height: 32,
                           decoration: BoxDecoration(
                             color: n.read
-                                ? scheme.onSurface.withValues(alpha: 8)
-                                : scheme.primary.withValues(alpha: 14),
+                                ? scheme.onSurface.withAlpha(8)
+                                : scheme.primary.withAlpha(14),
                             shape: BoxShape.circle,
                           ),
                           child: Icon(
                             Icons.notifications,
                             size: 18,
                             color: n.read
-                                ? scheme.onSurface.withValues(alpha: 150)
+                                ? scheme.onSurface.withAlpha(150)
                                 : scheme.primary,
                           ),
                         ),
@@ -129,7 +129,7 @@ class StudentNotificationsScreen extends StatelessWidget {
                                 style: GoogleFonts.poppins(
                                   fontSize: 12,
                                   color:
-                                      scheme.onSurface.withValues(alpha: 150),
+                                      scheme.onSurface.withAlpha(150),
                                 ),
                               ),
                               const SizedBox(height: 6),
@@ -138,7 +138,7 @@ class StudentNotificationsScreen extends StatelessWidget {
                                 style: GoogleFonts.poppins(
                                   fontSize: 11,
                                   color:
-                                      scheme.onSurface.withValues(alpha: 130),
+                                      scheme.onSurface.withAlpha(130),
                                 ),
                               ),
                             ],

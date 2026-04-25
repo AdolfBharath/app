@@ -33,7 +33,7 @@ class _ManageUserScreenState extends State<ManageUserScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
     _loadUsers();
   }
 
@@ -306,6 +306,12 @@ class _ManageUserScreenState extends State<ManageUserScreen>
                         style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
                       ),
                     ),
+                    Tab(
+                      child: Text(
+                        'Email Config',
+                        style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -320,6 +326,8 @@ class _ManageUserScreenState extends State<ManageUserScreen>
                   const AddUserScreen(),
                   // Manage Users Tab
                   _buildManageUsersTab(),
+                  // Email Config Tab
+                  const _EmailConfigTab(),
                 ],
               ),
             ),
@@ -441,11 +449,11 @@ class _ManageUserScreenState extends State<ManageUserScreen>
                     separatorBuilder: (_, __) => const SizedBox(height: 12),
                     itemBuilder: (_, __) {
                       return Shimmer.fromColors(
-                        baseColor: Colors.black.withOpacity(0.04),
+                        baseColor: const Color(0xFFF1F5F9),
                         highlightColor: Colors.white,
                         child: Container(
                           height: 140,
-                          decoration: LmsAdminTheme.adminCardDecoration,
+                          decoration: LmsAdminTheme.adminCardDecoration(context),
                         ),
                       );
                     },
@@ -455,10 +463,10 @@ class _ManageUserScreenState extends State<ManageUserScreen>
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(
+                        const Icon(
                           Icons.people_outline,
                           size: 64,
-                          color: const Color(0xFFD1D5DB),
+                          color: Color(0xFFD1D5DB),
                         ),
                         const SizedBox(height: 16),
                         Text(
@@ -513,9 +521,22 @@ class _UserCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Resolve course IDs to names via CourseProvider (already loaded).
+    final allCourses = context.watch<CourseProvider>().courses;
+    final List<String> courseNames = user.courseIds
+        .map((id) {
+          try {
+            return allCourses.firstWhere((c) => c.id == id).title;
+          } catch (_) {
+            return null;
+          }
+        })
+        .whereType<String>()
+        .toList();
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      decoration: LmsAdminTheme.adminCardDecoration,
+      decoration: LmsAdminTheme.adminCardDecoration(context),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -535,12 +556,12 @@ class _UserCard extends StatelessWidget {
                           gradient: LinearGradient(
                             colors: [
                               _getRoleColor(user.role),
-                              _getRoleColor(user.role).withOpacity(0.75),
+                              _getRoleColor(user.role).withAlpha(190),
                             ],
                           ),
                           boxShadow: [
                             BoxShadow(
-                              color: _getRoleColor(user.role).withOpacity(0.25),
+                              color: _getRoleColor(user.role).withAlpha(64),
                               blurRadius: 10,
                               offset: const Offset(0, 4),
                             ),
@@ -548,9 +569,7 @@ class _UserCard extends StatelessWidget {
                         ),
                         alignment: Alignment.center,
                         child: Text(
-                          user.name.isNotEmpty
-                              ? user.name[0].toUpperCase()
-                              : '?',
+                          user.name.isNotEmpty ? user.name[0].toUpperCase() : '?',
                           style: GoogleFonts.poppins(
                             fontSize: 28,
                             fontWeight: FontWeight.w700,
@@ -568,7 +587,7 @@ class _UserCard extends StatelessWidget {
                               style: GoogleFonts.poppins(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w700,
-                                color: const Color(0xFF111827),
+                                color: Theme.of(context).colorScheme.onSurface,
                               ),
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -588,13 +607,11 @@ class _UserCard extends StatelessWidget {
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
-                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
-                    color: _getRoleBackground(user.role),
+                    color: _getRoleColor(user.role).withAlpha(25),
                     borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: _getRoleColor(user.role).withAlpha(50), width: 0.5),
                   ),
                   child: Text(
                     _getRoleLabel(user.role),
@@ -608,12 +625,13 @@ class _UserCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 12),
-            Divider(height: 1, color: Colors.black.withOpacity(0.04)),
+            Divider(height: 1, color: Theme.of(context).dividerColor.withAlpha(50)),
             const SizedBox(height: 12),
             Row(
               children: [
                 Expanded(
                   child: _infoPanel(
+                    context: context,
                     label: 'Email',
                     value: user.email,
                     icon: Icons.mail_outline,
@@ -622,6 +640,7 @@ class _UserCard extends StatelessWidget {
                 const SizedBox(width: 16),
                 Expanded(
                   child: _infoPanel(
+                    context: context,
                     label: 'Username',
                     value: user.username ?? 'N/A',
                     icon: Icons.person_outline,
@@ -629,6 +648,59 @@ class _UserCard extends StatelessWidget {
                 ),
               ],
             ),
+            // Course assignments (students & mentors only)
+            if (courseNames.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF0F9FF),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFFBAE6FD)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.menu_book_outlined, size: 12, color: Color(0xFF0284C7)),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Assigned Courses',
+                          style: GoogleFonts.poppins(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: const Color(0xFF0284C7),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      children: courseNames.map((name) => Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: const Color(0xFFBAE6FD)),
+                        ),
+                        child: Text(
+                          name,
+                          style: GoogleFonts.poppins(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                            color: const Color(0xFF0369A1),
+                          ),
+                        ),
+                      )).toList(),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             const SizedBox(height: 16),
             Row(
               children: [
@@ -643,8 +715,7 @@ class _UserCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
 
-                if (user.role == UserRole.student ||
-                    user.role == UserRole.mentor) ...[
+                if (user.role == UserRole.student || user.role == UserRole.mentor) ...[
                   Expanded(
                     child: _CardActionButton(
                       icon: Icons.assignment_outlined,
@@ -694,41 +765,34 @@ class _UserCard extends StatelessWidget {
     }
   }
 
-  Color _getRoleBackground(UserRole role) {
-    switch (role) {
-      case UserRole.student:
-        return const Color(0xFFDEF7FF).withOpacity(0.5);
-      case UserRole.mentor:
-        return const Color(0xFFD1F5E9).withOpacity(0.5);
-      case UserRole.admin:
-        return const Color(0xFFFEE2E2).withOpacity(0.5);
-    }
-  }
-
   Widget _infoPanel({
+    required BuildContext context,
     required String label,
     required String value,
     required IconData icon,
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final onSurface = Theme.of(context).colorScheme.onSurface;
+
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFF),
+        color: isDark ? const Color(0xFF334155).withAlpha(100) : const Color(0xFFF8FAFF),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
+        border: Border.all(color: isDark ? Colors.white.withAlpha(20) : const Color(0xFFE5E7EB)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(icon, size: 14, color: const Color(0xFF6B7280)),
+              Icon(icon, size: 14, color: onSurface.withAlpha(140)),
               const SizedBox(width: 6),
               Text(
                 label,
                 style: GoogleFonts.poppins(
                   fontSize: 11,
-                  color: const Color(0xFF6B7280),
+                  color: onSurface.withAlpha(140),
                   fontWeight: FontWeight.w500,
                 ),
               ),
@@ -739,7 +803,7 @@ class _UserCard extends StatelessWidget {
             value,
             style: GoogleFonts.poppins(
               fontSize: 12,
-              color: const Color(0xFF111827),
+              color: onSurface,
               fontWeight: FontWeight.w600,
             ),
             overflow: TextOverflow.ellipsis,
@@ -762,6 +826,7 @@ class _EditUserDialog extends StatefulWidget {
 
 class _EditUserDialogState extends State<_EditUserDialog> {
   late TextEditingController _nameController;
+  late TextEditingController _emailController;
   late TextEditingController _usernameController;
   late TextEditingController _expertiseController;
   late UserRole _selectedRole;
@@ -773,6 +838,7 @@ class _EditUserDialogState extends State<_EditUserDialog> {
   void initState() {
     super.initState();
     _nameController = TextEditingController(text: widget.user.name);
+    _emailController = TextEditingController(text: widget.user.email);
     _usernameController = TextEditingController(
       text: widget.user.username ?? '',
     );
@@ -785,6 +851,7 @@ class _EditUserDialogState extends State<_EditUserDialog> {
   @override
   void dispose() {
     _nameController.dispose();
+    _emailController.dispose();
     _usernameController.dispose();
     _expertiseController.dispose();
     super.dispose();
@@ -820,14 +887,13 @@ class _EditUserDialogState extends State<_EditUserDialog> {
       final success = await ApiService.instance.updateUser(
         widget.user.id,
         name: _nameController.text.trim(),
+        email: _emailController.text.trim(),
         username: _usernameController.text.trim(),
         role: _roleToString(_selectedRole),
         expertise: expertise,
       );
 
-      if (success && mounted) {
-        Navigator.pop(context);
-        widget.onSave();
+      if (success && context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -836,6 +902,8 @@ class _EditUserDialogState extends State<_EditUserDialog> {
             ),
           ),
         );
+        Navigator.pop(context);
+        widget.onSave();
       }
     } on ApiException catch (e) {
       if (mounted) {
@@ -900,23 +968,30 @@ class _EditUserDialogState extends State<_EditUserDialog> {
               ),
               const SizedBox(height: 16),
 
-              // Email (read-only, cannot be edited here)
-              Text(
-                'Email',
-                style: GoogleFonts.poppins(
-                  fontSize: 11,
-                  color: const Color(0xFF6B7280),
-                  fontWeight: FontWeight.w500,
+              // Email (editable)
+              TextFormField(
+                controller: _emailController,
+                keyboardType: TextInputType.emailAddress,
+                decoration: InputDecoration(
+                  labelText: 'Email Address',
+                  hintText: 'user@example.com',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 12,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                widget.user.email,
-                style: GoogleFonts.poppins(
-                  fontSize: 13,
-                  color: const Color(0xFF111827),
-                  fontWeight: FontWeight.w500,
-                ),
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return 'Email is required';
+                  }
+                  if (!value.contains('@')) {
+                    return 'Enter a valid email';
+                  }
+                  return null;
+                },
               ),
               const SizedBox(height: 16),
 
@@ -1125,15 +1200,13 @@ class _AssignCourseDialogState extends State<_AssignCourseDialog> {
         includeCourseIds: true,
       );
 
-      if (success && mounted) {
+      if (success && context.mounted) {
         await context.read<AuthProvider>().loadUsers();
         await context.read<AuthProvider>().refreshCurrentUser();
         await context.read<CourseProvider>().loadCourses();
         if (kDebugMode) {
           print('User ${widget.user.id} assigned courses: ${_selectedCourseIds.toList(growable: false)}');
         }
-        Navigator.pop(context);
-        widget.onAssign();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -1142,6 +1215,8 @@ class _AssignCourseDialogState extends State<_AssignCourseDialog> {
             ),
           ),
         );
+        Navigator.pop(context);
+        widget.onAssign();
       }
     } on ApiException catch (e) {
       if (mounted) {
@@ -1330,6 +1405,305 @@ class _CardActionButton extends StatelessWidget {
             ],
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _EmailConfigTab extends StatefulWidget {
+  const _EmailConfigTab();
+
+  @override
+  State<_EmailConfigTab> createState() => _EmailConfigTabState();
+}
+
+class _EmailConfigTabState extends State<_EmailConfigTab> {
+  final _formKey = GlobalKey<FormState>();
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  bool _isLoading = false;
+  bool _isSaving = false;
+  String? _lastUpdated;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchConfig();
+  }
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _fetchConfig() async {
+    if (!mounted) return;
+    setState(() => _isLoading = true);
+    try {
+      final config = await ApiService.instance.getEmailConfig();
+      if (config['email'] != null) {
+        _emailController.text = config['email'] as String;
+        _passwordController.text = '••••••••••••••••';
+        if (config['updatedAt'] != null) {
+          final dt = DateTime.parse(config['updatedAt'] as String).toLocal();
+          _lastUpdated = '${dt.day}/${dt.month}/${dt.year} ${dt.hour}:${dt.minute.toString().padLeft(2, '0')}';
+        }
+      }
+    } catch (e) {
+      debugPrint('Error fetching email config: $e');
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _saveConfig() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() => _isSaving = true);
+    try {
+      final success = await ApiService.instance.updateEmailConfig(
+        email: _emailController.text.trim(),
+        appPassword: _passwordController.text.trim(),
+      );
+
+      if (success && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Configuration saved successfully!', style: GoogleFonts.poppins()),
+            backgroundColor: Colors.green,
+          ),
+        );
+        _fetchConfig();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to save configuration: $e', style: GoogleFonts.poppins()),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildInfoCard(),
+          const SizedBox(height: 24),
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: LmsAdminTheme.adminCardDecoration(context),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'SMTP Settings',
+                    style: GoogleFonts.poppins(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: theme.colorScheme.onSurface,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Configure the email account used to send automated messages.',
+                    style: GoogleFonts.poppins(
+                      fontSize: 12,
+                      color: theme.colorScheme.onSurface.withAlpha(150),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  _buildLabel('Sender Email (Gmail)'),
+                  const SizedBox(height: 8),
+                  TextFormField(
+                    controller: _emailController,
+                    decoration: _inputDecoration('e.g. admin@gmail.com', Icons.email_outlined),
+                    style: GoogleFonts.poppins(fontSize: 14),
+                    validator: (v) => (v == null || !v.contains('@')) ? 'Enter a valid email' : null,
+                  ),
+                  const SizedBox(height: 20),
+                  _buildLabel('Gmail App Password'),
+                  const SizedBox(height: 8),
+                  TextFormField(
+                    controller: _passwordController,
+                    obscureText: true,
+                    decoration: _inputDecoration('16-character app password', Icons.lock_outline),
+                    style: GoogleFonts.poppins(fontSize: 14),
+                    validator: (v) => (v == null || v.isEmpty) ? 'Enter app password' : null,
+                  ),
+                  const SizedBox(height: 32),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 54,
+                    child: ElevatedButton(
+                      onPressed: _isSaving ? null : _saveConfig,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF2563EB),
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                      child: _isSaving
+                          ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                          : Text(
+                              'Save Configuration',
+                              style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 15),
+                            ),
+                    ),
+                  ),
+                  if (_lastUpdated != null) ...[
+                    const SizedBox(height: 16),
+                    Center(
+                      child: Text(
+                        'Last updated: $_lastUpdated',
+                        style: GoogleFonts.poppins(
+                          fontSize: 11,
+                          color: theme.colorScheme.onSurface.withAlpha(120),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 32),
+          _buildSecurityNote(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLabel(String label) {
+    return Text(
+      label,
+      style: GoogleFonts.poppins(
+        fontSize: 13,
+        fontWeight: FontWeight.w600,
+        color: Theme.of(context).colorScheme.onSurface.withAlpha(200),
+      ),
+    );
+  }
+
+  InputDecoration _inputDecoration(String hint, IconData icon) {
+    return InputDecoration(
+      hintText: hint,
+      prefixIcon: Icon(icon, size: 20, color: const Color(0xFF2563EB)),
+      filled: true,
+      fillColor: const Color(0xFFF8FAFF),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Color(0xFF2563EB), width: 1.5),
+      ),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+    );
+  }
+
+  Widget _buildInfoCard() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF2563EB), Color(0xFF4F46E5)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF2563EB).withAlpha(64),
+            blurRadius: 15,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white.withAlpha(50),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.mark_email_read_rounded, color: Colors.white, size: 28),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Email Sender System',
+                  style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w700, color: Colors.white),
+                ),
+                Text(
+                  'Setup a global email for onboarding.',
+                  style: GoogleFonts.poppins(fontSize: 12, color: Colors.white.withAlpha(200)),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSecurityNote() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF7ED),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFFFEDD5)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.security_rounded, size: 18, color: Color(0xFFEA580C)),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Gmail Security Requirement',
+                  style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w700, color: const Color(0xFF9A3412)),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Use a 16-character App Password generated from your Google Account settings. Do not use your regular account password.',
+                  style: GoogleFonts.poppins(fontSize: 11, height: 1.5, color: const Color(0xFFC2410C)),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

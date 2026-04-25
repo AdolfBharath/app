@@ -30,6 +30,8 @@ class _AddUserScreenState extends State<AddUserScreen> {
   final _phoneController = TextEditingController();
   final _specializationController = TextEditingController();
   final _roleLevelController = TextEditingController();
+  final _senderEmailController = TextEditingController();
+  final _senderPasswordController = TextEditingController();
 
   UserRole _role = UserRole.student;
   String _selectedGender = 'Prefer not to say';
@@ -62,6 +64,8 @@ class _AddUserScreenState extends State<AddUserScreen> {
     _phoneController.dispose();
     _specializationController.dispose();
     _roleLevelController.dispose();
+    _senderEmailController.dispose();
+    _senderPasswordController.dispose();
     super.dispose();
   }
 
@@ -124,12 +128,24 @@ class _AddUserScreenState extends State<AddUserScreen> {
     required String phone,
     String? courseName,
   }) async {
+    // Resolve course name to title for email
+    final List<String> courseNamesForEmail = [];
+    if (courseName != null && courseName.isNotEmpty) {
+      courseNamesForEmail.add(courseName);
+    }
+
+    final senderEmail = _senderEmailController.text.trim();
+    final senderPassword = _senderPasswordController.text.trim();
+
     await ApiService.instance.createUser(
       name: name,
       email: email,
       password: password,
       role: 'student',
       phone: phone,
+      senderEmail: senderEmail.isNotEmpty ? senderEmail : null,
+      senderPassword: senderPassword.isNotEmpty ? senderPassword : null,
+      courseNames: courseNamesForEmail,
     );
     await _assignCourseIfNeeded(email: email, courseName: courseName);
   }
@@ -149,8 +165,11 @@ class _AddUserScreenState extends State<AddUserScreen> {
     final password = _passwordController.text.trim();
     final phone = _phoneController.text.trim();
     final roleString = _roleToApiRole(_role);
+    final senderEmail = _senderEmailController.text.trim();
+    final senderPassword = _senderPasswordController.text.trim();
 
     try {
+      Map<String, dynamic> result;
       if (_role == UserRole.student) {
         await _createStudentUser(
           name: name,
@@ -159,25 +178,39 @@ class _AddUserScreenState extends State<AddUserScreen> {
           phone: phone,
           courseName: _selectedCourse,
         );
+        result = {};
       } else {
-        await ApiService.instance.createUser(
+        result = await ApiService.instance.createUser(
           name: name,
           email: email,
           password: password,
           role: roleString,
           phone: phone,
+          senderEmail: senderEmail.isNotEmpty ? senderEmail : null,
+          senderPassword: senderPassword.isNotEmpty ? senderPassword : null,
         );
       }
 
       if (!mounted) return;
 
+      final emailSent = result['email_sent'] == true;
+      final emailWarning = result['email_warning'];
+      final msg = emailSent
+          ? 'User created ✅  Welcome email sent!'
+          : emailWarning != null
+              ? 'User created ⚠️  $emailWarning'
+              : 'User created successfully';
+
       await Provider.of<AuthProvider>(context, listen: false).loadUsers();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            'User created successfully',
-            style: GoogleFonts.poppins(),
-          ),
+          content: Text(msg, style: GoogleFonts.poppins()),
+          backgroundColor: emailSent
+              ? const Color(0xFF10B981)
+              : emailWarning != null
+                  ? const Color(0xFFF59E0B)
+                  : null,
+          duration: const Duration(seconds: 4),
         ),
       );
       _formKey.currentState!.reset();
@@ -255,9 +288,9 @@ class _AddUserScreenState extends State<AddUserScreen> {
           .toSet();
       final seenEmails = <String>{};
 
-      final rows = const CsvToListConverter(
-        shouldParseNumbers: false,
-      ).convert(utf8.decode(bytes));
+      final rows = Csv(
+        dynamicTyping: false,
+      ).decode(utf8.decode(bytes));
 
       if (rows.isEmpty) {
         throw ApiException('CSV file is empty');
@@ -601,6 +634,14 @@ class _AddUserScreenState extends State<AddUserScreen> {
                     ),
                   ),
                 ],
+
+                const SizedBox(height: 20),
+
+                // ── Email Config Card ────────────────────────────────────────
+                _EmailConfigCard(
+                  senderEmailController: _senderEmailController,
+                  senderPasswordController: _senderPasswordController,
+                ),
 
                 const SizedBox(height: 20),
 
@@ -964,6 +1005,214 @@ class _HeaderSection extends StatelessWidget {
   }
 }
 
+// ── Email Config Card ──────────────────────────────────────────────────────
+
+class _EmailConfigCard extends StatefulWidget {
+  const _EmailConfigCard({
+    required this.senderEmailController,
+    required this.senderPasswordController,
+  });
+
+  final TextEditingController senderEmailController;
+  final TextEditingController senderPasswordController;
+
+  @override
+  State<_EmailConfigCard> createState() => _EmailConfigCardState();
+}
+
+class _EmailConfigCardState extends State<_EmailConfigCard> {
+  bool _expanded = false;
+  bool _showPassword = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: _expanded ? const Color(0xFF2563EB) : const Color(0xFFE5E7EB),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          InkWell(
+            borderRadius: BorderRadius.circular(16),
+            onTap: () => setState(() => _expanded = !_expanded),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              child: Row(
+                children: [
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEFF6FF),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      Icons.email_outlined,
+                      size: 18,
+                      color: Color(0xFF2563EB),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Email Config (Optional)',
+                          style: GoogleFonts.poppins(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: const Color(0xFF111827),
+                          ),
+                        ),
+                        Text(
+                          _expanded
+                              ? 'Overrides global admin SMTP config'
+                              : 'Leave blank to use global SMTP configuration',
+                          style: GoogleFonts.poppins(
+                            fontSize: 11,
+                            color: const Color(0xFF6B7280),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Icon(
+                    _expanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
+                    color: const Color(0xFF9CA3AF),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (_expanded) ...[
+            const Divider(height: 1, color: Colors.transparent),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Info banner
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).brightness == Brightness.dark 
+                        ? const Color(0xFF78350F).withAlpha(50) 
+                        : const Color(0xFFFFFBEB),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: Theme.of(context).brightness == Brightness.dark 
+                          ? const Color(0xFFD97706).withAlpha(100) 
+                          : const Color(0xFFFDE68A)
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.info_outline, size: 16, color: Color(0xFFD97706)),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Gmail requires an App Password (not your login password). Generate one at myaccount.google.com → Security → App Passwords.',
+                            style: GoogleFonts.poppins(
+                              fontSize: 11,
+                              color: Theme.of(context).brightness == Brightness.dark 
+                                ? const Color(0xFFFDE68A) 
+                                : const Color(0xFF92400E),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  // Sender email field
+                  TextField(
+                    controller: widget.senderEmailController,
+                    keyboardType: TextInputType.emailAddress,
+                    style: GoogleFonts.poppins(fontSize: 13),
+                    decoration: InputDecoration(
+                      labelText: 'Sender Gmail Address',
+                      hintText: 'jenovate@gmail.com',
+                      labelStyle: GoogleFonts.poppins(fontSize: 12, color: const Color(0xFF6B7280)),
+                      hintStyle: GoogleFonts.poppins(fontSize: 12, color: const Color(0xFFD1D5DB)),
+                      prefixIcon: const Icon(Icons.alternate_email, size: 18, color: Color(0xFF6B7280)),
+                      filled: true,
+                      fillColor: Theme.of(context).brightness == Brightness.dark 
+                        ? const Color(0xFF1E293B) 
+                        : const Color(0xFFF8FAFF),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: Color(0xFF2563EB)),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  // App password field
+                  TextField(
+                    controller: widget.senderPasswordController,
+                    obscureText: !_showPassword,
+                    style: GoogleFonts.poppins(fontSize: 13),
+                    decoration: InputDecoration(
+                      labelText: 'Gmail App Password',
+                      hintText: '16-character app password',
+                      labelStyle: GoogleFonts.poppins(fontSize: 12, color: const Color(0xFF6B7280)),
+                      hintStyle: GoogleFonts.poppins(fontSize: 12, color: const Color(0xFFD1D5DB)),
+                      prefixIcon: const Icon(Icons.lock_outline, size: 18, color: Color(0xFF6B7280)),
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          _showPassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                          size: 18,
+                          color: const Color(0xFF9CA3AF),
+                        ),
+                        onPressed: () => setState(() => _showPassword = !_showPassword),
+                      ),
+                      filled: true,
+                      fillColor: const Color(0xFFF8FAFF),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: Color(0xFF2563EB)),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
 class _RoleCard extends StatelessWidget {
   const _RoleCard({
     required this.icon,
@@ -981,12 +1230,13 @@ class _RoleCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final Color borderColor = selected
         ? const Color(0xFF2563EB)
-        : const Color(0xFFE5E7EB);
+        : (isDark ? Colors.white.withAlpha(30) : const Color(0xFFE5E7EB));
     final Color backgroundColor = selected
-        ? const Color(0xFFEFF6FF)
-        : Colors.white;
+        ? (isDark ? const Color(0xFF1E3A8A).withAlpha(80) : const Color(0xFFEFF6FF))
+        : (isDark ? const Color(0xFF1E293B) : Colors.white);
 
     return GestureDetector(
       onTap: onTap,
@@ -1010,7 +1260,7 @@ class _RoleCard extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: isDark ? const Color(0xFF334155) : Colors.white,
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Icon(icon, size: 22, color: const Color(0xFF2563EB)),
@@ -1025,7 +1275,7 @@ class _RoleCard extends StatelessWidget {
                     style: GoogleFonts.poppins(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
-                      color: const Color(0xFF111827),
+                      color: Theme.of(context).colorScheme.onSurface,
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -1033,7 +1283,7 @@ class _RoleCard extends StatelessWidget {
                     description,
                     style: GoogleFonts.poppins(
                       fontSize: 12,
-                      color: const Color(0xFF6B7280),
+                      color: Theme.of(context).colorScheme.onSurface.withAlpha(160),
                     ),
                   ),
                 ],
@@ -1066,15 +1316,15 @@ class _RoleCard extends StatelessWidget {
 
 class _SecureRegistrationCard extends StatelessWidget {
   const _SecureRegistrationCard();
-
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: isDark ? const Color(0xFF1E293B) : Colors.white,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
+        border: Border.all(color: isDark ? Colors.white.withAlpha(20) : const Color(0xFFE5E7EB)),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.02),
@@ -1107,7 +1357,7 @@ class _SecureRegistrationCard extends StatelessWidget {
                   style: GoogleFonts.poppins(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: const Color(0xFF111827),
+                    color: Theme.of(context).colorScheme.onSurface,
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -1116,7 +1366,7 @@ class _SecureRegistrationCard extends StatelessWidget {
                   style: GoogleFonts.poppins(
                     fontSize: 11,
                     height: 1.4,
-                    color: const Color(0xFF6B7280),
+                    color: Theme.of(context).colorScheme.onSurface.withAlpha(160),
                   ),
                 ),
               ],
@@ -1194,7 +1444,9 @@ class _LabeledTextField extends StatelessWidget {
                 borderSide: BorderSide.none,
               ),
               filled: true,
-              fillColor: Colors.white,
+              fillColor: Theme.of(context).brightness == Brightness.dark 
+                ? const Color(0xFF1E293B) 
+                : const Color(0xFFF8FAFF),
             ),
             validator: validator,
           ),
@@ -1227,7 +1479,7 @@ class _GenderChips extends StatelessWidget {
           style: GoogleFonts.poppins(
             fontSize: 12,
             fontWeight: FontWeight.w500,
-            color: const Color(0xFF4B5563),
+            color: Theme.of(context).colorScheme.onSurface.withAlpha(200),
           ),
         ),
         const SizedBox(height: 6),
@@ -1283,6 +1535,7 @@ class _CourseDropdown extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1291,13 +1544,13 @@ class _CourseDropdown extends StatelessWidget {
           style: GoogleFonts.poppins(
             fontSize: 12,
             fontWeight: FontWeight.w500,
-            color: const Color(0xFF4B5563),
+            color: Theme.of(context).colorScheme.onSurface.withAlpha(180),
           ),
         ),
         const SizedBox(height: 6),
         Container(
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: isDark ? const Color(0xFF1E293B) : Colors.white,
             borderRadius: BorderRadius.circular(16),
             boxShadow: [
               BoxShadow(
@@ -1354,7 +1607,7 @@ class _CourseDropdown extends StatelessWidget {
                       borderSide: BorderSide.none,
                     ),
                     filled: true,
-                    fillColor: Colors.white,
+                    fillColor: isDark ? const Color(0xFF1E293B) : Colors.white,
                   ),
                   icon: const Icon(
                     Icons.expand_more_rounded,
@@ -1409,7 +1662,7 @@ class _SummaryTile extends StatelessWidget {
                   label,
                   style: GoogleFonts.poppins(
                     fontSize: 11,
-                    color: const Color(0xFF6B7280),
+                    color: Theme.of(context).colorScheme.onSurface.withAlpha(160),
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -1418,7 +1671,7 @@ class _SummaryTile extends StatelessWidget {
                   value,
                   style: GoogleFonts.poppins(
                     fontSize: 18,
-                    color: const Color(0xFF111827),
+                    color: Theme.of(context).colorScheme.onSurface,
                     fontWeight: FontWeight.w700,
                   ),
                 ),

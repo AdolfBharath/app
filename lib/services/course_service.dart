@@ -61,6 +61,18 @@ class CourseService extends ApiServiceBase {
       price = 0.0;
     }
 
+      final dynamic rawQuizCoinReward =
+        map['quiz_coin_reward'] ?? map['quizCoinReward'] ?? 0;
+      final int quizCoinReward = rawQuizCoinReward is num
+        ? rawQuizCoinReward.toInt()
+        : int.tryParse(rawQuizCoinReward.toString()) ?? 0;
+
+      final dynamic rawQuizPassScore =
+        map['quiz_pass_score'] ?? map['quizPassScore'] ?? 0;
+      final int quizPassScore = rawQuizPassScore is num
+        ? rawQuizPassScore.toInt()
+        : int.tryParse(rawQuizPassScore.toString()) ?? 0;
+
     final dynamic rawFeatured =
         map['is_featured'] ?? map['isFeatured'] ?? map['featured'];
     final bool isFeatured =
@@ -99,85 +111,82 @@ class CourseService extends ApiServiceBase {
     final dynamic rawModules = map['modules'];
     final List<CourseModule> modules;
     if (rawModules is List) {
-      modules = rawModules.asMap().entries.map((entry) {
-        final index = entry.key;
-        final item = entry.value;
-        if (item is Map) {
-          final map = Map<String, dynamic>.from(item);
-          final rawModuleNumber = map['moduleNumber'] ?? map['module_number'] ?? map['order'] ?? (index + 1);
-          final parsedModuleNumber = rawModuleNumber is num
-              ? rawModuleNumber.toInt()
-              : int.tryParse(rawModuleNumber.toString()) ?? (index + 1);
-          final transcript = (map['transcript'] ?? '').toString();
-          final moduleDescription = (map['description'] ?? '').toString();
+      // Check if the backend already provides a nested structure
+      final isNested = rawModules.isNotEmpty &&
+          rawModules.first is Map &&
+          (rawModules.first as Map).containsKey('lessons');
 
-          final rawStudyMaterials = map['studyMaterials'] ?? map['study_materials'];
-          final studyMaterials = <CourseStudyMaterial>[];
-          if (rawStudyMaterials is List) {
-            for (final material in rawStudyMaterials) {
-              if (material is Map) {
-                final mm = Map<String, dynamic>.from(material);
-                final title = (mm['title'] ?? '').toString().trim();
-                if (title.isEmpty) continue;
-                studyMaterials.add(
-                  CourseStudyMaterial(
-                    title: title,
-                    description: (mm['description'] ?? '').toString(),
-                    driveLink: (mm['driveLink'] ?? mm['drive_link'] ?? '').toString(),
-                    fileName: (mm['fileName'] ?? mm['file_name'] ?? '').toString(),
-                    fileType: (mm['fileType'] ?? mm['file_type'] ?? '').toString(),
-                  ),
-                );
-              }
-            }
-          }
-
-          final rawQuizQuestions = map['quizQuestions'] ?? map['quiz_questions'];
-          final quizQuestions = <CourseQuizQuestion>[];
-          if (rawQuizQuestions is List) {
-            for (final question in rawQuizQuestions) {
-              if (question is Map) {
-                final qq = Map<String, dynamic>.from(question);
-                final text = (qq['question'] ?? '').toString().trim();
-                if (text.isEmpty) continue;
-                quizQuestions.add(
-                  CourseQuizQuestion(
-                    question: text,
-                    optionA: (qq['optionA'] ?? qq['option_a'] ?? '').toString(),
-                    optionB: (qq['optionB'] ?? qq['option_b'] ?? '').toString(),
-                    optionC: (qq['optionC'] ?? qq['option_c'] ?? '').toString(),
-                    optionD: (qq['optionD'] ?? qq['option_d'] ?? '').toString(),
-                    correctAnswer: (qq['correctAnswer'] ?? qq['correct_answer'] ?? '').toString(),
-                  ),
-                );
-              }
-            }
-          }
+      if (isNested) {
+        modules = rawModules.asMap().entries.map((entry) {
+          final index = entry.key;
+          final m = Map<String, dynamic>.from(entry.value as Map);
+          
+          final rawLessons = m['lessons'] as List? ?? [];
+          final lessons = rawLessons.asMap().entries.map((le) {
+            final lIdx = le.key;
+            final l = Map<String, dynamic>.from(le.value as Map);
+            return CourseLesson(
+              id: (l['id'] ?? '').toString(),
+              title: (l['title'] ?? '').toString(),
+              videoDriveLink: (l['videoDriveLink'] ?? l['video_drive_link'] ?? '').toString(),
+              transcript: (l['transcript'] ?? '').toString(),
+              duration: (l['duration'] ?? '').toString(),
+              orderIndex: (l['orderIndex'] ?? l['order_index'] ?? lIdx).toInt(),
+              isCompleted: (l['isCompleted'] ?? l['is_completed'] ?? false) as bool,
+            );
+          }).toList();
 
           return CourseModule(
-            id: (map['id'] ?? '').toString(),
-            courseId: map['courseId']?.toString() ?? map['course_id']?.toString(),
-            moduleNumber: parsedModuleNumber,
-            title: (map['title'] ?? '').toString(),
-            moduleDescription: moduleDescription,
-            lessonTitle: (map['lessonTitle'] ?? map['lesson_title'] ?? map['title'] ?? '').toString(),
-            videoDriveLink: (map['videoDriveLink'] ?? map['video_drive_link'] ?? '').toString(),
-            transcript: transcript,
-            duration: (map['duration'] ?? '').toString(),
-            description: moduleDescription,
-            order: parsedModuleNumber,
-            studyMaterials: studyMaterials,
-            quizQuestions: quizQuestions,
+            id: (m['id'] ?? '').toString(),
+            title: (m['title'] ?? '').toString(),
+            description: (m['description'] ?? m['moduleDescription'] ?? '').toString(),
+            orderIndex: (m['orderIndex'] ?? m['order_index'] ?? m['moduleNumber'] ?? index).toInt(),
+            lessons: lessons,
+            coinReward: (m['coinReward'] ?? m['coin_reward'] ?? 0).toInt(),
+            studyMaterials: _parseStudyMaterials(m['studyMaterials'] ?? m['study_materials']),
+            quizQuestions: _parseQuizQuestions(m['quizQuestions'] ?? m['quiz_questions']),
           );
+        }).toList();
+      } else {
+        // Flat structure fallback: group by moduleNumber
+        final groupedMap = <int, List<Map<String, dynamic>>>{};
+        for (final m in rawModules) {
+          if (m is! Map) continue;
+          final mm = Map<String, dynamic>.from(m);
+          final modNum = (mm['moduleNumber'] ?? mm['module_number'] ?? 1).toInt();
+          groupedMap.putIfAbsent(modNum, () => []).add(mm);
         }
-        return CourseModule(
-          id: '',
-          moduleNumber: index + 1,
-          title: item.toString(),
-          description: '',
-          order: index + 1,
-        );
-      }).toList(growable: false);
+
+        final sortedModNums = groupedMap.keys.toList()..sort();
+        modules = sortedModNums.map((modNum) {
+          final items = groupedMap[modNum]!;
+          final first = items.first;
+          
+          final lessons = items.asMap().entries.map((le) {
+            final lIdx = le.key;
+            final l = le.value;
+            return CourseLesson(
+              id: (l['id'] ?? '').toString(),
+              title: (l['lessonTitle'] ?? l['title'] ?? '').toString(),
+              videoDriveLink: (l['videoDriveLink'] ?? l['video_drive_link'] ?? '').toString(),
+              transcript: (l['transcript'] ?? '').toString(),
+              duration: (l['duration'] ?? '').toString(),
+              orderIndex: (l['orderIndex'] ?? l['order_index'] ?? lIdx).toInt(),
+            );
+          }).toList();
+
+          return CourseModule(
+            id: 'mod_$modNum',
+            title: (first['title'] ?? 'Module $modNum').toString(),
+            description: (first['moduleDescription'] ?? '').toString(),
+            orderIndex: modNum,
+            lessons: lessons,
+            coinReward: (first['coinReward'] ?? first['coin_reward'] ?? 0).toInt(),
+            studyMaterials: _parseStudyMaterials(first['studyMaterials'] ?? first['study_materials']),
+            quizQuestions: _parseQuizQuestions(first['quizQuestions'] ?? first['quiz_questions']),
+          );
+        }).toList();
+      }
     } else {
       modules = const [];
     }
@@ -199,7 +208,57 @@ class CourseService extends ApiServiceBase {
       isMyCourse: isMyCourse,
       status: status.isEmpty ? 'Published' : status,
       createdByAdmin: createdByAdmin,
+      quizCoinReward: quizCoinReward,
+      quizPassScore: quizPassScore,
+      mentorId: (map['mentor_id'] ?? map['mentorId'])?.toString(),
     );
+  }
+
+  List<CourseStudyMaterial> _parseStudyMaterials(dynamic raw) {
+    final list = <CourseStudyMaterial>[];
+    if (raw is List) {
+      for (final item in raw) {
+        if (item is Map) {
+          final mm = Map<String, dynamic>.from(item);
+          final title = (mm['title'] ?? '').toString().trim();
+          if (title.isEmpty) continue;
+          list.add(
+            CourseStudyMaterial(
+              title: title,
+              description: (mm['description'] ?? '').toString(),
+              driveLink: (mm['driveLink'] ?? mm['drive_link'] ?? '').toString(),
+              fileName: (mm['fileName'] ?? mm['file_name'] ?? '').toString(),
+              fileType: (mm['fileType'] ?? mm['file_type'] ?? '').toString(),
+            ),
+          );
+        }
+      }
+    }
+    return list;
+  }
+
+  List<CourseQuizQuestion> _parseQuizQuestions(dynamic raw) {
+    final list = <CourseQuizQuestion>[];
+    if (raw is List) {
+      for (final item in raw) {
+        if (item is Map) {
+          final qq = Map<String, dynamic>.from(item);
+          final text = (qq['question'] ?? '').toString().trim();
+          if (text.isEmpty) continue;
+          list.add(
+            CourseQuizQuestion(
+              question: text,
+              optionA: (qq['optionA'] ?? qq['option_a'] ?? '').toString(),
+              optionB: (qq['optionB'] ?? qq['option_b'] ?? '').toString(),
+              optionC: (qq['optionC'] ?? qq['option_c'] ?? '').toString(),
+              optionD: (qq['optionD'] ?? qq['option_d'] ?? '').toString(),
+              correctAnswer: (qq['correctAnswer'] ?? qq['correct_answer'] ?? '').toString(),
+            ),
+          );
+        }
+      }
+    }
+    return list;
   }
 
   // ---------------------------------------------------------------------------
@@ -350,6 +409,8 @@ class CourseService extends ApiServiceBase {
     List<Map<String, dynamic>> modules = const [],
     double price = 0.0,
     String? mentorId,
+    int quizCoinReward = 0,
+    int quizPassScore = 0,
   }) async {
     final uri = buildUri('/courses/$id');
     final body = <String, dynamic>{
@@ -364,8 +425,15 @@ class CourseService extends ApiServiceBase {
       'rating': rating,
       'modules': modules,
       'price': price,
-      'mentor_id': mentorId,
+      'quiz_coin_reward': quizCoinReward,
+      'quiz_pass_score': quizPassScore,
     };
+    // Only send mentor_id when it is explicitly provided (non-null).
+    // Sending null would be treated as defined by JSON, potentially
+    // clearing the existing mentor assignment on the server.
+    if (mentorId != null && mentorId.isNotEmpty) {
+      body['mentor_id'] = mentorId;
+    }
 
     final response = await http.put(
       uri,
@@ -384,5 +452,66 @@ class CourseService extends ApiServiceBase {
 
     if (isSuccess(response)) return true;
     throwApiError(response, 'Failed to delete course');
+  }
+
+  Future<Map<String, dynamic>> getCourseProgress(String courseId) async {
+    final uri = buildUri('/courses/$courseId/progress');
+    final response = await http.get(uri, headers: await buildAuthHeaders());
+
+    if (isSuccess(response)) {
+      final decoded = jsonDecode(response.body);
+      if (decoded is Map<String, dynamic>) return decoded;
+      throw ApiException('Unexpected course progress response format');
+    }
+
+    throwApiError(response, 'Failed to load course progress');
+  }
+
+  Future<Map<String, dynamic>> completeLesson({
+    required String courseId,
+    required int moduleNumber,
+    required String lessonKey,
+  }) async {
+    final uri = buildUri('/courses/$courseId/lessons/complete');
+    final response = await http.post(
+      uri,
+      headers: await buildAuthHeaders(),
+      body: jsonEncode({
+        'module_number': moduleNumber,
+        'lesson_key': lessonKey,
+      }),
+    );
+
+    if (isSuccess(response)) {
+      final decoded = jsonDecode(response.body);
+      if (decoded is Map<String, dynamic>) return decoded;
+      throw ApiException('Unexpected lesson completion response format');
+    }
+
+    throwApiError(response, 'Failed to complete lesson');
+  }
+
+  Future<Map<String, dynamic>> completeQuiz({
+    required String courseId,
+    required int score,
+    required int total,
+  }) async {
+    final uri = buildUri('/courses/$courseId/quiz/complete');
+    final response = await http.post(
+      uri,
+      headers: await buildAuthHeaders(),
+      body: jsonEncode({
+        'score': score,
+        'total': total,
+      }),
+    );
+
+    if (isSuccess(response)) {
+      final decoded = jsonDecode(response.body);
+      if (decoded is Map<String, dynamic>) return decoded;
+      throw ApiException('Unexpected quiz completion response format');
+    }
+
+    throwApiError(response, 'Failed to complete quiz');
   }
 }

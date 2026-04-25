@@ -55,14 +55,14 @@ class LmsAdminTheme {
       cardTheme: CardThemeData(
         color: scheme.surface,
         elevation: 0,
-        shadowColor: Colors.black.withValues(alpha: 12),
+        shadowColor: Colors.black.withAlpha(12),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(borderRadiusConfig),
-          side: BorderSide(color: scheme.onSurface.withValues(alpha: 12)),
+          side: BorderSide(color: scheme.onSurface.withAlpha(12)),
         ),
       ),
       dividerTheme: DividerThemeData(
-        color: scheme.onSurface.withValues(alpha: 10),
+        color: scheme.onSurface.withAlpha(10),
         thickness: 1,
         space: 1,
       ),
@@ -114,14 +114,14 @@ class LmsAdminTheme {
       cardTheme: CardThemeData(
         color: scheme.surface,
         elevation: 0,
-        shadowColor: Colors.black.withValues(alpha: 30),
+        shadowColor: Colors.black.withAlpha(30),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(borderRadiusConfig),
-          side: BorderSide(color: scheme.onSurface.withValues(alpha: 18)),
+          side: BorderSide(color: scheme.onSurface.withAlpha(18)),
         ),
       ),
       dividerTheme: DividerThemeData(
-        color: scheme.onSurface.withValues(alpha: 16),
+        color: scheme.onSurface.withAlpha(16),
         thickness: 1,
         space: 1,
       ),
@@ -152,14 +152,18 @@ class LmsAdminTheme {
     );
   }
 
-  static BoxDecoration get adminCardDecoration {
+  static BoxDecoration adminCardDecoration(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return BoxDecoration(
-      color: surfaceWhite,
+      color: isDark ? const Color(0xFF1E293B) : surfaceWhite,
       borderRadius: BorderRadius.circular(borderRadiusConfig),
-      border: Border.all(color: Colors.black.withValues(alpha: 10), width: 1),
+      border: Border.all(
+        color: isDark ? Colors.white.withAlpha(20) : Colors.black.withAlpha(10),
+        width: 1,
+      ),
       boxShadow: [
         BoxShadow(
-          color: Colors.black.withValues(alpha: 5),
+          color: isDark ? Colors.black.withAlpha(40) : Colors.black.withAlpha(5),
           blurRadius: 10,
           offset: const Offset(0, 4),
         ),
@@ -167,14 +171,18 @@ class LmsAdminTheme {
     );
   }
 
-  static BoxDecoration get glassDecoration {
+  static BoxDecoration glassDecoration(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return BoxDecoration(
-      color: surfaceWhite.withValues(alpha: 217),
+      color: isDark ? const Color(0xFF1E293B).withAlpha(200) : surfaceWhite.withAlpha(217),
       borderRadius: BorderRadius.circular(24),
-      border: Border.all(color: Colors.white.withValues(alpha: 153), width: 1.5),
+      border: Border.all(
+        color: isDark ? Colors.white.withAlpha(30) : Colors.white.withAlpha(153),
+        width: 1.5,
+      ),
       boxShadow: [
         BoxShadow(
-          color: Colors.black.withValues(alpha: 8),
+          color: isDark ? Colors.black.withAlpha(50) : Colors.black.withAlpha(8),
           blurRadius: 16,
           offset: const Offset(0, 8),
         ),
@@ -191,8 +199,8 @@ class LmsStudentTheme {
   static const Color lightBackground = Color(0xFFF8FAFC);
   static const Color lightSurface    = Color(0xFFFFFFFF);
   
-  static const Color darkBackground  = Color(0xFF111827); // Standard dark equivalent
-  static const Color darkSurface     = Color(0xFF1F2937);
+  static const Color darkBackground  = Color(0xFF121212); // Premium dark background
+  static const Color darkSurface     = Color(0xFF1E1E1E);
 
   // Text Colors
   static const Color textPrimary   = Color(0xFF1F2937);

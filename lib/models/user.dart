@@ -12,6 +12,10 @@ class AppUser {
   final String? batchId;
   final List<String> expertise;
   final List<String> courseIds;
+  final int streakCount;
+  final DateTime? lastActiveDate;
+  final int coins;
+  final List<bool> weeklyLogins;
 
   const AppUser({
     required this.id,
@@ -25,5 +29,9 @@ class AppUser {
     this.batchId,
     this.expertise = const [],
     this.courseIds = const [],
+    this.streakCount = 0,
+    this.lastActiveDate,
+    this.coins = 0,
+    this.weeklyLogins = const [false, false, false, false, false, false, false],
   });
 }

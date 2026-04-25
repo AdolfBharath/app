@@ -35,7 +35,7 @@ class StudentProgressScreen extends StatelessWidget {
                   'Enroll in a course to start tracking progress.',
                   textAlign: TextAlign.center,
                   style: GoogleFonts.poppins(
-                    color: scheme.onSurface.withValues(alpha: 235),
+                    color: scheme.onSurface.withAlpha(235),
                   ),
                 ),
               );
@@ -65,7 +65,7 @@ class StudentProgressScreen extends StatelessWidget {
                               value: overall,
                               strokeWidth: 10,
                               backgroundColor:
-                                  scheme.onSurface.withValues(alpha: 12),
+                                  scheme.onSurface.withAlpha(12),
                               valueColor: AlwaysStoppedAnimation<Color>(
                                 scheme.primary,
                               ),
@@ -87,7 +87,7 @@ class StudentProgressScreen extends StatelessWidget {
                         'Overall progress',
                         style: GoogleFonts.poppins(
                           fontSize: 13,
-                          color: scheme.onSurface.withValues(alpha: 150),
+                          color: scheme.onSurface.withAlpha(150),
                         ),
                       ),
                     ],
@@ -110,7 +110,7 @@ class StudentProgressScreen extends StatelessWidget {
                         ),
                         elevation: 0,
                         color: scheme.surface,
-                        shadowColor: theme.shadowColor.withValues(alpha: 12),
+                        shadowColor: theme.shadowColor.withAlpha(12),
                         child: Padding(
                           padding: const EdgeInsets.all(14),
                           child: Column(
@@ -132,7 +132,7 @@ class StudentProgressScreen extends StatelessWidget {
                                   value: progress,
                                   minHeight: 6,
                                   backgroundColor:
-                                      scheme.onSurface.withValues(alpha: 12),
+                                      scheme.onSurface.withAlpha(12),
                                   valueColor: AlwaysStoppedAnimation<Color>(
                                     scheme.primary,
                                   ),
@@ -148,7 +148,7 @@ class StudentProgressScreen extends StatelessWidget {
                                     style: GoogleFonts.poppins(
                                       fontSize: 12,
                                       color: scheme.onSurface
-                                          .withValues(alpha: 150),
+                                          .withAlpha(150),
                                     ),
                                   ),
                                   Text(

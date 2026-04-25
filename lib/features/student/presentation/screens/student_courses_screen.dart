@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../config/theme.dart';
+import '../../../../models/course.dart';
 import '../../../../screens/course_detail_screen.dart';
 import '../providers/student_nav_provider.dart';
 import '../providers/student_provider.dart';
@@ -56,7 +57,7 @@ class StudentCoursesScreen extends StatelessWidget {
                                 style: GoogleFonts.poppins(
                                   fontSize: 12,
                                   fontWeight: FontWeight.w500,
-                                  color: scheme.onSurface.withValues(alpha: 160),
+                                  color: scheme.onSurface.withAlpha(160),
                                 ),
                               ),
                             ],
@@ -77,21 +78,24 @@ class StudentCoursesScreen extends StatelessWidget {
                           child: Container(
                             height: 40,
                             padding: const EdgeInsets.all(4),
-                            decoration: BoxDecoration(
+                            decoration: const BoxDecoration(
                               color: Colors.transparent,
                             ),
                             child: TabBar(
                               indicatorSize: TabBarIndicatorSize.tab,
                               dividerColor: Colors.transparent,
-                              labelColor: const Color(0xFF2563EB),
-                              unselectedLabelColor: const Color(0xFF9CA3AF),
+                              labelColor: scheme.primary,
+                              unselectedLabelColor: scheme.onSurface.withAlpha(140),
                               indicator: BoxDecoration(
-                                color: const Color(0xFFEFF6FF),
+                                color: scheme.primary.withValues(alpha: 0.12),
                                 borderRadius: BorderRadius.circular(20),
-                                border: Border.all(color: const Color(0xFFBFDBFE), width: 1.5),
+                                border: Border.all(
+                                  color: scheme.primary.withValues(alpha: 0.3),
+                                  width: 1.5,
+                                ),
                               ),
                               labelStyle: GoogleFonts.inter(
-                                fontWeight: FontWeight.w600,
+                                fontWeight: FontWeight.w700,
                                 fontSize: 13,
                               ),
                               unselectedLabelStyle: GoogleFonts.inter(
@@ -107,9 +111,11 @@ class StudentCoursesScreen extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: 12),
-                        Icon(Icons.format_list_bulleted_rounded, color: const Color(0xFF9CA3AF), size: 24),
+                        Icon(Icons.format_list_bulleted_rounded,
+                            color: scheme.onSurface.withAlpha(140), size: 24),
                         const SizedBox(width: 8),
-                        Icon(Icons.grid_view_rounded, color: const Color(0xFF2563EB), size: 24),
+                        Icon(Icons.grid_view_rounded,
+                            color: scheme.primary, size: 24),
                       ],
                     ),
                   ],
@@ -124,11 +130,11 @@ class StudentCoursesScreen extends StatelessWidget {
                   builder: (context, student, _) {
                     final enrolled = student.enrolledCourses;
                     final ongoing = enrolled.where((c) {
-                      final p = _mockProgress(enrolled.indexOf(c));
+                      final p = student.getCourseProgress(c.id);
                       return p > 0.01 && p < 1.0;
                     }).toList();
                     final completed = enrolled.where((c) {
-                      final p = _mockProgress(enrolled.indexOf(c));
+                      final p = student.getCourseProgress(c.id);
                       return p >= 1.0;
                     }).toList();
 
@@ -157,9 +163,6 @@ class StudentCoursesScreen extends StatelessWidget {
       ),
     );
   }
-
-  static double _mockProgress(int index) =>
-      (0.25 + index * 0.25).clamp(0.0, 1.0);
 }
 
 // ─── Courses list ─────────────────────────────────────────────────────────────
@@ -180,14 +183,14 @@ class _CoursesList extends StatelessWidget {
             Icon(
               completed ? Icons.emoji_events_outlined : Icons.school_outlined,
               size: 48,
-              color: scheme.onSurface.withValues(alpha: 80),
+              color: scheme.onSurface.withAlpha(80),
             ),
             const SizedBox(height: 12),
             Text(
               'No courses here yet',
               style: GoogleFonts.poppins(
                 fontWeight: FontWeight.w600,
-                color: scheme.onSurface.withValues(alpha: 160),
+                color: scheme.onSurface.withAlpha(160),
               ),
             ),
           ],
@@ -201,12 +204,10 @@ class _CoursesList extends StatelessWidget {
       separatorBuilder: (_, __) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
         final course = courses[index];
-        final progress = StudentCoursesScreen._mockProgress(index);
-        return GestureDetector(
-          onTap: () => Navigator.of(context)
-              .pushNamed(CourseDetailScreen.routeName, arguments: course.id),
-          child: _CourseCard(course: course, progress: progress),
-        )
+        final student = context.watch<StudentProvider>();
+        final progress = student.getCourseProgress(course.id);
+        
+        return _CourseCard(course: course, progress: progress)
             .animate(delay: Duration(milliseconds: index * 60))
             .fadeIn(duration: 280.ms)
             .slideY(begin: 0.06, end: 0);
@@ -218,7 +219,7 @@ class _CoursesList extends StatelessWidget {
 // ─── Course card ──────────────────────────────────────────────────────────────
 class _CourseCard extends StatefulWidget {
   const _CourseCard({required this.course, required this.progress});
-  final dynamic course;
+  final Course course;
   final double progress;
   @override
   State<_CourseCard> createState() => _CourseCardState();
@@ -233,6 +234,27 @@ class _CourseCardState extends State<_CourseCard> {
     final scheme = theme.colorScheme;
     final isCompleted = widget.progress >= 1.0;
 
+    final student = context.watch<StudentProvider>();
+    final completedKeys = student.getCompletedLessons(widget.course.id);
+
+    int totalLessons = 0;
+    int completedCount = 0;
+    CourseLesson? nextLesson;
+    int? nextModuleOrderIndex;
+
+    for (final module in widget.course.modules) {
+      for (final lesson in module.lessons) {
+        totalLessons++;
+        final key = '${module.orderIndex}:${lesson.title.trim()}';
+        if (completedKeys.contains(key)) {
+          completedCount++;
+        } else if (nextLesson == null) {
+          nextLesson = lesson;
+          nextModuleOrderIndex = module.orderIndex;
+        }
+      }
+    }
+
     return AnimatedScale(
       duration: const Duration(milliseconds: 120),
       scale: _pressed ? 0.98 : 1.0,
@@ -240,14 +262,23 @@ class _CourseCardState extends State<_CourseCard> {
         onTapDown: (_) => setState(() => _pressed = true),
         onTapUp: (_) => setState(() => _pressed = false),
         onTapCancel: () => setState(() => _pressed = false),
+        onTap: () {
+          Navigator.of(context).pushNamed(
+            CourseDetailScreen.routeName,
+            arguments: {
+              'courseId': widget.course.id,
+              'targetLessonKey': null,
+            },
+          );
+        },
         child: Container(
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: scheme.surface,
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: const Color(0xFFF3F4F6)),
+            border: Border.all(color: scheme.onSurface.withAlpha(10)),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.04),
+                color: theme.shadowColor.withValues(alpha: 0.06),
                 blurRadius: 16,
                 offset: const Offset(0, 4),
               ),
@@ -256,7 +287,6 @@ class _CourseCardState extends State<_CourseCard> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Full bleed Thumbnail
               Stack(
                 children: [
                   ClipRRect(
@@ -268,52 +298,66 @@ class _CourseCardState extends State<_CourseCard> {
                             height: 140,
                             fit: BoxFit.cover,
                             errorBuilder: (_, __, ___) => _Placeholder(
-                                size: double.infinity, height: 140, color: const Color(0xFFF3F4F6)),
+                                size: double.infinity, height: 140, color: scheme.primary),
                           )
-                        : _Placeholder(size: double.infinity, height: 140, color: const Color(0xFFF3F4F6)),
+                        : _Placeholder(
+                            size: double.infinity, height: 140, color: scheme.primary),
                   ),
-                  // "Play / Continue" overlay pill
                   Positioned(
                     right: 12,
-                    bottom: -16, // overlap bottom edge
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF2563EB),
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color(0xFF2563EB).withValues(alpha: 0.3),
-                            blurRadius: 8,
-                            offset: const Offset(0, 4),
-                          )
-                        ],
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                             isCompleted ? Icons.check_circle_rounded : Icons.play_arrow_rounded,
-                             color: Colors.white,
-                             size: 16
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            isCompleted ? 'Completed' : 'Continue',
-                            style: GoogleFonts.inter(
+                    bottom: -16,
+                    child: GestureDetector(
+                      onTap: () {
+                        Navigator.of(context).pushNamed(
+                          CourseDetailScreen.routeName,
+                          arguments: {
+                            'courseId': widget.course.id,
+                            'targetLessonKey': nextLesson != null && nextModuleOrderIndex != null
+                                ? '$nextModuleOrderIndex:${nextLesson.title.trim()}'
+                                : null,
+                          },
+                        );
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: scheme.primary,
+                          borderRadius: BorderRadius.circular(20),
+                          boxShadow: [
+                            BoxShadow(
+                              color: scheme.primary.withValues(alpha: 0.35),
+                              blurRadius: 8,
+                              offset: const Offset(0, 4),
+                            )
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              isCompleted
+                                  ? Icons.check_circle_rounded
+                                  : Icons.play_arrow_rounded,
                               color: Colors.white,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
+                              size: 16,
                             ),
-                          ),
-                        ],
+                            const SizedBox(width: 4),
+                            Text(
+                              isCompleted ? 'Completed' : 'Continue',
+                              style: GoogleFonts.inter(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                  )
+                  ),
                 ],
               ),
               const SizedBox(height: 16),
-              // Info Bottom
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                 child: Column(
@@ -326,7 +370,7 @@ class _CourseCardState extends State<_CourseCard> {
                       style: GoogleFonts.inter(
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
-                        color: const Color(0xFF1F2937),
+                        color: scheme.onSurface,
                         height: 1.2,
                       ),
                     ),
@@ -334,51 +378,61 @@ class _CourseCardState extends State<_CourseCard> {
                     Row(
                       children: [
                         Icon(Icons.menu_book_rounded,
-                            size: 14, color: const Color(0xFF6B7280)),
+                            size: 14,
+                            color: scheme.onSurface.withAlpha(160)),
                         const SizedBox(width: 4),
                         Text(
-                          'Lesson 24/30',
+                          'Lesson $completedCount/$totalLessons',
                           style: GoogleFonts.inter(
-                              fontSize: 12, fontWeight: FontWeight.w500, color: const Color(0xFF6B7280)),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: scheme.onSurface.withAlpha(160)),
                         ),
                         const SizedBox(width: 16),
                         Icon(Icons.schedule_outlined,
-                            size: 14, color: const Color(0xFF6B7280)),
+                            size: 14,
+                            color: scheme.onSurface.withAlpha(160)),
                         const SizedBox(width: 4),
                         Text(
-                          '2 hrs 40 mins',
+                          widget.course.duration.isNotEmpty
+                              ? widget.course.duration
+                              : 'Self-paced',
                           style: GoogleFonts.inter(
                             fontSize: 12,
                             fontWeight: FontWeight.w500,
-                            color: const Color(0xFF6B7280),
+                            color: scheme.onSurface.withAlpha(160),
                           ),
                         ),
                       ],
                     ),
                     const SizedBox(height: 16),
-                    // Progress bar
                     Row(
                       children: [
                         Expanded(
                           child: ClipRRect(
                             borderRadius: BorderRadius.circular(6),
                             child: LinearProgressIndicator(
-                              value: widget.progress,
+                              value: totalLessons > 0 ? completedCount / totalLessons : 0.0,
                               minHeight: 6,
-                              backgroundColor: const Color(0xFFF3F4F6),
+                              backgroundColor:
+                                  scheme.onSurface.withValues(alpha: 0.1),
                               valueColor: AlwaysStoppedAnimation<Color>(
-                                isCompleted ? const Color(0xFF10B981) : const Color(0xFF2563EB),
+                                isCompleted
+                                    ? const Color(0xFF10B981)
+                                    : scheme.primary,
                               ),
                             ),
                           ),
                         ),
                         const SizedBox(width: 12),
                         Text(
-                          '${(widget.progress * 100).round()}%',
+                          '${totalLessons > 0 ? (completedCount / totalLessons * 100).round() : 0}%',
                           style: GoogleFonts.inter(
                             fontSize: 12,
                             fontWeight: FontWeight.w700,
-                            color: isCompleted ? const Color(0xFF10B981) : const Color(0xFF2563EB),
+                            color: isCompleted
+                                ? const Color(0xFF10B981)
+                                : scheme.primary,
                           ),
                         ),
                       ],
@@ -407,11 +461,12 @@ class _Placeholder extends StatelessWidget {
       width: size,
       height: height ?? size,
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 22),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(14),
       ),
       child: Icon(Icons.play_circle_outline_rounded,
-          color: color, size: (height ?? size) * 0.45),
+          color: color.withValues(alpha: 0.5),
+          size: (height ?? size) * 0.45),
     );
   }
 }
@@ -429,7 +484,7 @@ class _StatsPill extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       decoration: BoxDecoration(
-        color: const Color(0xFFEFF6FF), // soft blue background
+        color: scheme.primary.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(
@@ -437,7 +492,7 @@ class _StatsPill extends StatelessWidget {
         style: GoogleFonts.inter(
           fontSize: 12,
           fontWeight: FontWeight.w700,
-          color: const Color(0xFF2563EB), // solid blue text
+          color: scheme.primary,
         ),
       ),
     );
@@ -456,9 +511,9 @@ class _ExploreBanner extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: scheme.primary.withValues(alpha: 12),
+        color: scheme.primary.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: scheme.primary.withValues(alpha: 24)),
+        border: Border.all(color: scheme.primary.withValues(alpha: 0.2)),
       ),
       child: Row(
         children: [
@@ -466,7 +521,7 @@ class _ExploreBanner extends StatelessWidget {
             width: 46,
             height: 46,
             decoration: BoxDecoration(
-              color: scheme.primary.withValues(alpha: 18),
+              color: scheme.primary.withValues(alpha: 0.14),
               borderRadius: BorderRadius.circular(14),
             ),
             child: Icon(Icons.rocket_launch_outlined, color: scheme.primary),
@@ -487,7 +542,7 @@ class _ExploreBanner extends StatelessWidget {
                   style: GoogleFonts.poppins(
                     fontSize: 11,
                     fontWeight: FontWeight.w500,
-                    color: scheme.onSurface.withValues(alpha: 160),
+                    color: scheme.onSurface.withAlpha(160),
                   ),
                 ),
               ],

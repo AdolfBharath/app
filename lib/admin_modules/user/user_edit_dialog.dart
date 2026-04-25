@@ -51,11 +51,12 @@ class _UserEditDialogState extends State<UserEditDialog> {
     try {
       // User editing via local state only - backend doesn't support user updates yet
       // This is a placeholder for future backend implementation
-      if (!mounted) return;
-      Navigator.of(context).pop();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('User update feature coming soon')),
-      );
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('User update feature coming soon', style: GoogleFonts.poppins())),
+        );
+        Navigator.of(context).pop();
+      }
       widget.onSave();
     } catch (e) {
       if (!mounted) return;

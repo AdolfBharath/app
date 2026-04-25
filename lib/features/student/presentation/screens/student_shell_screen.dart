@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -24,13 +25,39 @@ class StudentShellScreen extends StatefulWidget {
 
 class _StudentShellScreenState extends State<StudentShellScreen> {
   late final _LifecycleObserver _lifecycleObserver;
+  Timer? _pollingTimer;
 
+  void _startPolling() {
+    _pollingTimer?.cancel();
+    _pollingTimer = Timer.periodic(const Duration(seconds: 30), (timer) async {
+      if (!mounted) return;
+      final auth = context.read<AuthProvider>();
+      final studentProvider = context.read<StudentProvider>();
+      
+      // Refresh user to get assigned courses list
+      await auth.refreshCurrentUser();
+      if (!mounted) return;
+      
+      if (auth.currentUser != null) {
+        studentProvider.syncWithUser(auth.currentUser);
+      }
+      
+      final assignedCourseIds = auth.currentUser?.courseIds ?? const <String>[];
+      await studentProvider.fetchCourses(assignedCourseIds: assignedCourseIds);
+      await studentProvider.fetchNotifications();
+    });
+  }
   @override
   void initState() {
     super.initState();
-    _lifecycleObserver = _LifecycleObserver(onResume: () {
+    _startPolling();
+    _lifecycleObserver = _LifecycleObserver(onResume: () async {
       if (!mounted) return;
-      context.read<StudentProvider>().checkDailyReward();
+      final auth = context.read<AuthProvider>();
+      await auth.refreshCurrentUser();
+      if (mounted && auth.currentUser != null) {
+        context.read<StudentProvider>().syncWithUser(auth.currentUser);
+      }
     });
     WidgetsBinding.instance.addObserver(_lifecycleObserver);
     // Trigger daily reward check on first frame.
@@ -40,13 +67,12 @@ class _StudentShellScreenState extends State<StudentShellScreen> {
         final studentProvider = context.read<StudentProvider>();
         await auth.refreshCurrentUser();
         if (!mounted) return;
-        final assignedCourseIds = auth.currentUser?.courseIds ?? const <String>[];
+        
+        if (auth.currentUser != null) {
+          studentProvider.syncWithUser(auth.currentUser);
+        }
 
-        // Debug-only: seed Monday login so Tuesday shows 2 coins / 2 streak
-        // and Monday is active in the weekly tracker.
-        await studentProvider.debugSeedMondayLoginForTesting();
-        await studentProvider.checkDailyReward();
-        if (!mounted) return;
+        final assignedCourseIds = auth.currentUser?.courseIds ?? const <String>[];
         await studentProvider.fetchCourses(
           assignedCourseIds: assignedCourseIds,
         );
@@ -58,6 +84,7 @@ class _StudentShellScreenState extends State<StudentShellScreen> {
 
   @override
   void dispose() {
+    _pollingTimer?.cancel();
     WidgetsBinding.instance.removeObserver(_lifecycleObserver);
     super.dispose();
   }

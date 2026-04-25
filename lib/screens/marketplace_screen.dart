@@ -1,6 +1,9 @@
+import 'dart:convert';
 import 'dart:math';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 
 import '../features/mentor/presentation/screens/mentor_notifications_screen.dart';
@@ -15,6 +18,8 @@ import '../providers/theme_provider.dart';
 import '../services/api_service.dart';
 import 'course_detail_screen.dart';
 import 'login_screen.dart';
+import '../providers/config_provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class MarketplaceScreen extends StatefulWidget {
   const MarketplaceScreen({super.key});
@@ -200,11 +205,11 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
           decoration: BoxDecoration(
             color: scheme.surface,
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: scheme.onSurface.withValues(alpha: 10)),
+            border: Border.all(color: scheme.onSurface.withAlpha(10)),
           ),
           child: Row(
             children: [
-              Icon(Icons.search_rounded, color: scheme.onSurface.withValues(alpha: 160)),
+              Icon(Icons.search_rounded, color: scheme.onSurface.withAlpha(160)),
               const SizedBox(width: 10),
               Expanded(
                 child: TextField(
@@ -228,7 +233,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                     backgroundColor: scheme.surface,
                     foregroundColor: scheme.onSurface,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                    side: BorderSide(color: scheme.onSurface.withValues(alpha: 10)),
+                    side: BorderSide(color: scheme.onSurface.withAlpha(10)),
                   ),
                   icon: Icon(
                     _featuredOnly || _difficultyFilters.isNotEmpty || _trendingOnly
@@ -300,7 +305,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
             const Spacer(),
             Text(
               '${visibleCourses.length}',
-              style: text.labelLarge?.copyWith(color: scheme.onSurface.withValues(alpha: 160)),
+              style: text.labelLarge?.copyWith(color: scheme.onSurface.withAlpha(160)),
             ),
           ],
         ),
@@ -344,11 +349,40 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
           style: theme.textTheme.bodyMedium,
         ),
         const SizedBox(height: 16),
-        if (!auth.isLoggedIn)
-          FilledButton(
-            onPressed: () => Navigator.of(context).pushNamed(LoginScreen.routeName),
-            child: const Text('Log in to continue'),
+        if (!auth.isLoggedIn) ...[
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton(
+              onPressed: () => Navigator.of(context).pushNamed(LoginScreen.routeName),
+              child: const Text('Log in to continue'),
+            ),
           ),
+          const SizedBox(height: 12),
+          Center(
+            child: GestureDetector(
+              onTap: () async {
+                final config = context.read<ConfigProvider>();
+                final url = config.registrationFormUrl;
+                if (url.isNotEmpty) {
+                  final uri = Uri.tryParse(url);
+                  if (uri != null) {
+                    await launchUrl(uri, mode: LaunchMode.externalApplication);
+                  }
+                } else {
+                  Navigator.of(context).pushNamed(LoginScreen.routeName);
+                }
+              },
+              child: Text(
+                'New user? Register here',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: scheme.primary,
+                  fontWeight: FontWeight.w600,
+                  decoration: TextDecoration.underline,
+                ),
+              ),
+            ),
+          ),
+        ],
         if (auth.isLoggedIn && myCourses.isEmpty)
           _emptyCard(context, 'No enrolled courses yet. Explore and enroll in a course.'),
         if (auth.isLoggedIn)
@@ -366,7 +400,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
           Text(
             'Tip: Tap a course to open details.',
             style: theme.textTheme.bodySmall?.copyWith(
-              color: scheme.onSurface.withValues(alpha: 160),
+              color: scheme.onSurface.withAlpha(160),
             ),
           ),
         ],
@@ -394,14 +428,14 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
           decoration: BoxDecoration(
             color: scheme.surface,
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: scheme.onSurface.withValues(alpha: 12)),
+            border: Border.all(color: scheme.onSurface.withAlpha(12)),
           ),
           padding: const EdgeInsets.all(16),
           child: Row(
             children: [
               CircleAvatar(
                 radius: 26,
-                backgroundColor: scheme.primary.withValues(alpha: 12),
+                backgroundColor: scheme.primary.withAlpha(12),
                 child: Icon(Icons.person_outline_rounded, color: scheme.primary),
               ),
               const SizedBox(width: 12),
@@ -433,7 +467,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
           decoration: BoxDecoration(
             color: scheme.surface,
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: scheme.onSurface.withValues(alpha: 12)),
+            border: Border.all(color: scheme.onSurface.withAlpha(12)),
           ),
           child: Row(
             children: [
@@ -458,9 +492,9 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: scheme.onSurface.withValues(alpha: 6),
+        color: scheme.onSurface.withAlpha(6),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: scheme.onSurface.withValues(alpha: 10)),
+        border: Border.all(color: scheme.onSurface.withAlpha(10)),
       ),
       child: Text(
         label,
@@ -486,7 +520,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
       decoration: BoxDecoration(
         color: scheme.surface,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: scheme.onSurface.withValues(alpha: 12)),
+        border: Border.all(color: scheme.onSurface.withAlpha(12)),
       ),
       child: Text(
         text,
@@ -505,16 +539,13 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     final scheme = theme.colorScheme;
     final durationTag = (topCourse.duration.isNotEmpty ? topCourse.duration : 'Course').toUpperCase();
     return InkWell(
-      onTap: () => Navigator.of(context).pushNamed(
-        CourseDetailScreen.routeName,
-        arguments: topCourse.id,
-      ),
+      onTap: () => _handleCourseTap(context, topCourse.id),
       borderRadius: BorderRadius.circular(16),
       child: Container(
         decoration: BoxDecoration(
           color: scheme.surface,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: scheme.onSurface.withValues(alpha: 10)),
+          border: Border.all(color: scheme.onSurface.withAlpha(10)),
         ),
         child: Row(
           children: [
@@ -522,7 +553,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
               width: 76,
               height: 92,
               decoration: BoxDecoration(
-                color: scheme.primary.withValues(alpha: 10),
+                color: scheme.primary.withAlpha(10),
                 borderRadius: const BorderRadius.only(
                   topLeft: Radius.circular(16),
                   bottomLeft: Radius.circular(16),
@@ -556,7 +587,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                             overflow: TextOverflow.ellipsis,
                             style: theme.textTheme.labelSmall?.copyWith(
                               fontWeight: FontWeight.w700,
-                              color: scheme.onSurface.withValues(alpha: 160),
+                              color: scheme.onSurface.withAlpha(160),
                             ),
                           ),
                         ),
@@ -579,12 +610,22 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                           style: theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w800),
                         ),
                         const SizedBox(width: 12),
-                        Icon(Icons.groups_rounded, size: 16, color: scheme.onSurface.withValues(alpha: 160)),
+                        Icon(Icons.groups_rounded, size: 16, color: scheme.onSurface.withAlpha(160)),
                         const SizedBox(width: 4),
                         Text(
                           _formatLearners(enrolledCount),
                           style: theme.textTheme.bodySmall?.copyWith(
-                            color: scheme.onSurface.withValues(alpha: 180),
+                            color: scheme.onSurface.withAlpha(180),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Icon(Icons.monetization_on_rounded, size: 16, color: Colors.amber),
+                        const SizedBox(width: 4),
+                        Text(
+                          topCourse.price == 0 ? 'Free' : '₹${topCourse.price.toStringAsFixed(0)}',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            fontWeight: FontWeight.w800,
+                            color: Colors.amber,
                           ),
                         ),
                       ],
@@ -599,13 +640,13 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                 width: 30,
                 height: 30,
                 decoration: BoxDecoration(
-                  color: scheme.onSurface.withValues(alpha: 6),
+                  color: scheme.onSurface.withAlpha(6),
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: scheme.onSurface.withValues(alpha: 10)),
+                  border: Border.all(color: scheme.onSurface.withAlpha(10)),
                 ),
                 child: Icon(
                   Icons.chevron_right_rounded,
-                  color: scheme.onSurface.withValues(alpha: 170),
+                  color: scheme.onSurface.withAlpha(170),
                   size: 20,
                 ),
               ),
@@ -630,19 +671,16 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
       decoration: BoxDecoration(
         color: scheme.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: scheme.onSurface.withValues(alpha: 12)),
+        border: Border.all(color: scheme.onSurface.withAlpha(12)),
       ),
       child: ListTile(
-        onTap: () => Navigator.of(context).pushNamed(
-          CourseDetailScreen.routeName,
-          arguments: course.id,
-        ),
+        onTap: () => _handleCourseTap(context, course.id),
         leading: ClipRRect(
           borderRadius: BorderRadius.circular(12),
           child: Container(
             width: 46,
             height: 46,
-            color: scheme.primary.withValues(alpha: 10),
+            color: scheme.primary.withAlpha(10),
             child: course.thumbnailUrl.isNotEmpty
                 ? Image.network(course.thumbnailUrl, fit: BoxFit.cover)
                 : Icon(Icons.school_rounded, color: scheme.primary),
@@ -655,7 +693,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
           style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
         ),
         subtitle: Text(
-          '${course.category.isNotEmpty ? course.category : 'General'}  •  ${course.rating.toStringAsFixed(1)} ★  •  $enrolledCount learners',
+          '${course.category.isNotEmpty ? course.category : 'General'}  •  ${course.rating.toStringAsFixed(1)} ★  •  $enrolledCount learners  •  ${course.price == 0 ? 'Free' : '₹${course.price.toStringAsFixed(0)}'}',
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: theme.textTheme.bodySmall,
@@ -665,6 +703,18 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
           child: Text(actionLabel ?? _primaryActionLabel(course, enrolled: enrolled)),
         ),
       ),
+    );
+  }
+
+  void _handleCourseTap(BuildContext context, String courseId) {
+    final auth = Provider.of<AuthProvider>(context, listen: false);
+    if (!auth.isLoggedIn) {
+      Navigator.of(context).pushNamed(LoginScreen.routeName);
+      return;
+    }
+    Navigator.of(context).pushNamed(
+      CourseDetailScreen.routeName,
+      arguments: courseId,
     );
   }
 
@@ -965,13 +1015,13 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
 
   Widget _skeletonFeaturedCard(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final base = scheme.onSurface.withValues(alpha: 8);
+    final base = scheme.onSurface.withAlpha(8);
     return Container(
       height: 132,
       decoration: BoxDecoration(
         color: scheme.surface,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: scheme.onSurface.withValues(alpha: 12)),
+        border: Border.all(color: scheme.onSurface.withAlpha(12)),
       ),
       child: Row(
         children: [
@@ -1010,13 +1060,13 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
 
   Widget _skeletonListTile(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final base = scheme.onSurface.withValues(alpha: 8);
+    final base = scheme.onSurface.withAlpha(8);
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
         color: scheme.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: scheme.onSurface.withValues(alpha: 12)),
+        border: Border.all(color: scheme.onSurface.withAlpha(12)),
       ),
       child: Padding(
         padding: const EdgeInsets.all(14),
@@ -1062,28 +1112,59 @@ class _MarketplaceHeaderRow extends StatelessWidget {
     final scheme = theme.colorScheme;
     return Row(
       children: [
-        Container(
-          width: 32,
+        Image.asset(
+          'assets/logo.png',
           height: 32,
-          decoration: BoxDecoration(
-            color: scheme.primary,
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Icon(Icons.flash_on_rounded, color: scheme.onPrimary, size: 18),
-        ),
-        const SizedBox(width: 10),
-        Text(
-          'Jenovate',
-          style: theme.textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.w800,
-            color: scheme.primary,
+          fit: BoxFit.contain,
+          errorBuilder: (context, error, stackTrace) => Row(
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: scheme.primary,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(Icons.flash_on_rounded, color: scheme.onPrimary, size: 18),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                'Jenovate',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  color: scheme.primary,
+                ),
+              ),
+            ],
           ),
         ),
         const Spacer(),
-        if (!isLoggedIn)
+        if (!isLoggedIn) ...[
+          TextButton(
+            onPressed: () async {
+              final config = context.read<ConfigProvider>();
+              final url = config.registrationFormUrl;
+              if (url.isNotEmpty) {
+                final uri = Uri.tryParse(url);
+                if (uri != null) {
+                  await launchUrl(uri, mode: LaunchMode.externalApplication);
+                }
+              } else {
+                Navigator.of(context).pushNamed(LoginScreen.routeName);
+              }
+            },
+            child: Text(
+              'Register',
+              style: theme.textTheme.labelLarge?.copyWith(
+                color: scheme.primary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          const SizedBox(width: 4),
           TextButton.icon(
             onPressed: onLoginTap,
-            icon: Icon(Icons.arrow_forward_rounded, size: 18, color: scheme.primary),
+            icon: Icon(Icons.login_rounded, size: 18, color: scheme.primary),
             label: Text(
               'Log in',
               style: theme.textTheme.labelLarge?.copyWith(
@@ -1091,7 +1172,8 @@ class _MarketplaceHeaderRow extends StatelessWidget {
                 fontWeight: FontWeight.w800,
               ),
             ),
-          )
+          ),
+        ]
         else ...[
           IconButton(
             tooltip: 'Notifications',
@@ -1192,7 +1274,7 @@ class _MarketplaceBottomNav extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: scheme.surface,
-        border: Border(top: BorderSide(color: scheme.onSurface.withValues(alpha: 12))),
+        border: Border(top: BorderSide(color: scheme.onSurface.withAlpha(12))),
       ),
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
       child: Row(
@@ -1243,7 +1325,7 @@ class _BottomItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final color = active ? scheme.primary : scheme.onSurface.withValues(alpha: 160);
+    final color = active ? scheme.primary : scheme.onSurface.withAlpha(160);
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
@@ -1321,7 +1403,7 @@ class _CategoryOrbitState extends State<_CategoryOrbit> with SingleTickerProvide
               CustomPaint(
                 size: const Size(260, 260),
                 painter: _DottedCirclePainter(
-                  color: scheme.onSurface.withValues(alpha: 18),
+                  color: scheme.primary.withValues(alpha: 0.12),
                   dotRadius: 1.2,
                   gap: 7.0,
                 ),
@@ -1329,7 +1411,7 @@ class _CategoryOrbitState extends State<_CategoryOrbit> with SingleTickerProvide
               CustomPaint(
                 size: const Size(188, 188),
                 painter: _DottedCirclePainter(
-                  color: scheme.onSurface.withValues(alpha: 14),
+                  color: scheme.primary.withValues(alpha: 0.08),
                   dotRadius: 1.1,
                   gap: 8.5,
                 ),
@@ -1340,7 +1422,7 @@ class _CategoryOrbitState extends State<_CategoryOrbit> with SingleTickerProvide
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: scheme.primary,
-                  border: Border.all(color: scheme.onPrimary.withValues(alpha: 18)),
+                  border: Border.all(color: scheme.onPrimary.withAlpha(18)),
                 ),
                 child: Center(
                   child: Column(
@@ -1444,8 +1526,8 @@ class _OrbitNode extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final tint = selected
-        ? scheme.primary.withValues(alpha: 14)
-        : scheme.onSurface.withValues(alpha: 6);
+        ? scheme.primary.withValues(alpha: 0.08)
+        : Colors.white;
     return GestureDetector(
       onTap: onTap,
       child: Column(
@@ -1461,7 +1543,7 @@ class _OrbitNode extends StatelessWidget {
               border: Border.all(
                 color: selected
                     ? scheme.primary
-                    : scheme.onSurface.withValues(alpha: 14),
+                    : scheme.primary.withValues(alpha: 0.15),
                 width: selected ? 1.8 : 1,
               ),
             ),

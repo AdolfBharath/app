@@ -19,6 +19,7 @@ import '../models/project.dart';
 import '../models/task.dart';
 import '../models/task_submission.dart';
 import '../models/user.dart';
+import '../models/shop_item.dart';
 import 'dart:typed_data';
 
 import 'auth_service.dart';
@@ -29,6 +30,10 @@ import 'project_service.dart';
 import 'support_service.dart';
 import 'task_service.dart';
 import 'user_service.dart';
+import 'shop_service.dart';
+import 'app_config_service.dart';
+import 'question_service.dart';
+import '../models/question.dart';
 
 /// Singleton facade that delegates to domain-specific services.
 ///
@@ -112,6 +117,8 @@ class ApiService {
     List<Map<String, dynamic>> modules = const [],
     double price = 0.0,
     String? mentorId,
+    int quizCoinReward = 0,
+    int quizPassScore = 0,
   }) =>
       CourseService.instance.updateCourseDetails(
         id,
@@ -127,9 +134,36 @@ class ApiService {
         modules: modules,
         price: price,
         mentorId: mentorId,
+        quizCoinReward: quizCoinReward,
+        quizPassScore: quizPassScore,
       );
 
   Future<bool> deleteCourse(String id) => CourseService.instance.deleteCourse(id);
+
+  Future<Map<String, dynamic>> getCourseProgress(String courseId) =>
+      CourseService.instance.getCourseProgress(courseId);
+
+  Future<Map<String, dynamic>> completeLesson({
+    required String courseId,
+    required int moduleNumber,
+    required String lessonKey,
+  }) =>
+      CourseService.instance.completeLesson(
+        courseId: courseId,
+        moduleNumber: moduleNumber,
+        lessonKey: lessonKey,
+      );
+
+  Future<Map<String, dynamic>> completeQuiz({
+    required String courseId,
+    required int score,
+    required int total,
+  }) =>
+      CourseService.instance.completeQuiz(
+        courseId: courseId,
+        score: score,
+        total: total,
+      );
 
   Future<void> enrollInCourse(String courseId) =>
       CourseService.instance.enrollInCourse(courseId);
@@ -197,6 +231,42 @@ class ApiService {
   Future<bool> deleteBatch(String id) => BatchService.instance.deleteBatch(id);
 
   // ---------------------------------------------------------------------------
+  // Shop
+  // ---------------------------------------------------------------------------
+
+  Future<List<ShopItem>> fetchShopItems() => ShopService.instance.fetchShopItems();
+
+  Future<ShopItem> createShopItem({
+    required String name,
+    required int price,
+    required String imageUrl,
+  }) =>
+      ShopService.instance.createShopItem(
+        name: name,
+        price: price,
+        imageUrl: imageUrl,
+      );
+
+  Future<ShopItem> updateShopItem({
+    required String itemId,
+    String? name,
+    int? price,
+    String? imageUrl,
+  }) =>
+      ShopService.instance.updateShopItem(
+        itemId: itemId,
+        name: name,
+        price: price,
+        imageUrl: imageUrl,
+      );
+
+  Future<void> deleteShopItem(String itemId) =>
+      ShopService.instance.deleteShopItem(itemId);
+
+  Future<int> purchaseShopItem(String itemId) =>
+      ShopService.instance.purchaseItem(itemId);
+
+  // ---------------------------------------------------------------------------
   // Users
   // ---------------------------------------------------------------------------
 
@@ -206,12 +276,15 @@ class ApiService {
     Future<List<Map<String, dynamic>>> getStudentsForCourse(String courseId) =>
       UserService.instance.getStudentsForCourse(courseId);
 
-  Future<bool> createUser({
+  Future<Map<String, dynamic>> createUser({
     required String name,
     required String email,
     required String password,
     required String role,
     String? phone,
+    String? senderEmail,
+    String? senderPassword,
+    List<String>? courseNames,
   }) =>
       UserService.instance.createUser(
         name: name,
@@ -219,6 +292,9 @@ class ApiService {
         password: password,
         role: role,
         phone: phone,
+        senderEmail: senderEmail,
+        senderPassword: senderPassword,
+        courseNames: courseNames,
       );
 
   Future<bool> updateUser(
@@ -399,5 +475,66 @@ class ApiService {
         submissionId: submissionId,
         status: status,
         feedback: feedback,
+      );
+
+  // ---------------------------------------------------------------------------
+  // Email Config
+  // ---------------------------------------------------------------------------
+
+  Future<Map<String, dynamic>> getEmailConfig() =>
+      UserService.instance.getEmailConfig();
+
+  Future<bool> updateEmailConfig({
+    required String email,
+    required String appPassword,
+  }) =>
+      UserService.instance.updateEmailConfig(
+        email: email,
+        appPassword: appPassword,
+      );
+
+  // ---------------------------------------------------------------------------
+  // App Config
+  // ---------------------------------------------------------------------------
+
+  Future<Map<String, dynamic>> getAppConfig() =>
+      AppConfigService.instance.getConfig();
+
+  Future<bool> updateAppConfig(Map<String, dynamic> config) =>
+      AppConfigService.instance.updateConfig(config);
+
+  // ---------------------------------------------------------------------------
+  // Questions
+  // ---------------------------------------------------------------------------
+
+  Future<List<Question>> getQuestions({String? mentorId, String? studentId}) =>
+      QuestionService.instance.getQuestions(mentorId: mentorId, studentId: studentId);
+
+  Future<Question> createQuestion({
+    required String courseId,
+    required String moduleId,
+    required String lessonId,
+    required String mentorId,
+    required String title,
+    required String description,
+    String? attachmentUrl,
+  }) =>
+      QuestionService.instance.createQuestion(
+        courseId: courseId,
+        moduleId: moduleId,
+        lessonId: lessonId,
+        mentorId: mentorId,
+        title: title,
+        description: description,
+        attachmentUrl: attachmentUrl,
+      );
+
+  Future<Question> replyToQuestion({
+    required String questionId,
+    required String reply,
+  }) =>
+      QuestionService.instance.replyToQuestion(
+        questionId: questionId,
+        reply: reply,
       );
 }

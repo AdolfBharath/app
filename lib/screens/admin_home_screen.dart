@@ -8,6 +8,7 @@ import '../models/user.dart';
 import '../providers/auth_provider.dart';
 import '../providers/batch_provider.dart';
 import '../providers/course_provider.dart';
+import '../providers/shop_provider.dart';
 import '../services/api_service.dart';
 import 'admin_home_dashboard.dart';
 import 'admin_profile_screen.dart';
@@ -16,6 +17,7 @@ import 'manage_batch_screen.dart';
 import 'manage_course_screen.dart';
 import 'manage_user_screen.dart';
 import 'marketplace_screen.dart';
+import '../widgets/animated_lms_nav_bar.dart';
 
 class AdminHomeScreen extends StatefulWidget {
   const AdminHomeScreen({super.key});
@@ -60,6 +62,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
     final auth = Provider.of<AuthProvider>(context, listen: false);
     final courses = Provider.of<CourseProvider>(context, listen: false);
     final batches = Provider.of<BatchProvider>(context, listen: false);
+    final shop = Provider.of<ShopProvider>(context, listen: false);
 
     Future.microtask(() async {
       if (!mounted) return;
@@ -75,6 +78,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
         auth.loadUsers(),
         courses.loadCourses(),
         batches.loadBatches(),
+        shop.fetchShopItems(),
       ]);
 
       await _loadAdminInbox();
@@ -555,85 +559,41 @@ class _AdminLmsNavigationBar extends StatelessWidget {
   final int currentIndex;
   final ValueChanged<int> onItemSelected;
 
+  static const _navItems = [
+    LmsNavItem(
+      icon: Icons.people_outline_rounded,
+      activeIcon: Icons.people_rounded,
+      label: 'Users',
+    ),
+    LmsNavItem(
+      icon: Icons.menu_book_outlined,
+      activeIcon: Icons.menu_book_rounded,
+      label: 'Courses',
+    ),
+    LmsNavItem(
+      icon: Icons.dashboard_outlined,
+      activeIcon: Icons.dashboard_rounded,
+      label: 'Home',
+    ),
+    LmsNavItem(
+      icon: Icons.layers_outlined,
+      activeIcon: Icons.layers_rounded,
+      label: 'Batches',
+    ),
+    LmsNavItem(
+      icon: Icons.person_outline_rounded,
+      activeIcon: Icons.person_rounded,
+      label: 'Profile',
+    ),
+  ];
+
   @override
   Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(26),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(26),
-            color: Colors.white.withOpacity(0.92),
-            border: Border.all(
-              color: Colors.white.withOpacity(0.8),
-              width: 1.5,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.04),
-                blurRadius: 20,
-                offset: const Offset(0, 8),
-              ),
-            ],
-          ),
-          child: NavigationBarTheme(
-            data: NavigationBarThemeData(
-              labelTextStyle: WidgetStateProperty.resolveWith((states) {
-                final selected = states.contains(WidgetState.selected);
-                return GoogleFonts.poppins(
-                  fontSize: 12,
-                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                  color: selected
-                      ? const Color(0xFFFFFFFF)
-                      : const Color(0xFF94A3B8),
-                );
-              }),
-            ),
-            child: NavigationBar(
-              height: 82,
-              selectedIndex: currentIndex,
-              backgroundColor: Colors.transparent,
-              indicatorColor: const Color(0xFF2563EB),
-              labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-              onDestinationSelected: onItemSelected,
-              destinations: const [
-                NavigationDestination(
-                  icon: Icon(Icons.people_outline_rounded),
-                  selectedIcon: Icon(Icons.people_rounded, color: Colors.white),
-                  label: 'Users',
-                ),
-                NavigationDestination(
-                  icon: Icon(Icons.menu_book_outlined),
-                  selectedIcon: Icon(
-                    Icons.menu_book_rounded,
-                    color: Colors.white,
-                  ),
-                  label: 'Courses',
-                ),
-                NavigationDestination(
-                  icon: Icon(Icons.dashboard_outlined),
-                  selectedIcon: Icon(
-                    Icons.dashboard_rounded,
-                    color: Colors.white,
-                  ),
-                  label: 'Home',
-                ),
-                NavigationDestination(
-                  icon: Icon(Icons.layers_outlined),
-                  selectedIcon: Icon(Icons.layers_rounded, color: Colors.white),
-                  label: 'Batches',
-                ),
-                NavigationDestination(
-                  icon: Icon(Icons.person_outline_rounded),
-                  selectedIcon: Icon(Icons.person_rounded, color: Colors.white),
-                  label: 'Profile',
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
+    return AnimatedLmsNavBar(
+      currentIndex: currentIndex,
+      items: _navItems,
+      onTap: onItemSelected,
+      activeColor: const Color(0xFF2563EB),
     );
   }
 }

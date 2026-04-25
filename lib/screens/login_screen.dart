@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../providers/config_provider.dart';
 
 import '../models/user.dart';
 import '../providers/auth_provider.dart';
@@ -34,6 +36,10 @@ class _LoginScreenState extends State<LoginScreen> {
   void initState() {
     super.initState();
     _loadRememberedEmail();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      context.read<ConfigProvider>().loadConfig();
+    });
   }
 
   Future<void> _loadRememberedEmail() async {
@@ -59,11 +65,147 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  bool _loginPressed = false;
+
   @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
+  }
+
+  // ── Forgot Password Dialog ─────────────────────────────────────────────────
+  Future<void> _showForgotPasswordDialog() async {
+    final forgotEmailCtrl = TextEditingController(
+      text: _emailController.text.trim(),
+    );
+    final scheme = Theme.of(context).colorScheme;
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        bool sending = false;
+        String? resultMsg;
+        bool success = false;
+
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) => AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(24),
+            ),
+            title: Text(
+              'Reset Password',
+              style: GoogleFonts.inter(
+                fontWeight: FontWeight.w700,
+                fontSize: 20,
+              ),
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Enter your email address and we\'ll send you a password reset link.',
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    color: scheme.onSurface.withValues(alpha: 0.6),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: forgotEmailCtrl,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: InputDecoration(
+                    hintText: 'your@email.com',
+                    prefixIcon: const Icon(Icons.email_outlined),
+                    filled: true,
+                    fillColor: scheme.surfaceContainerHighest,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                ),
+                if (resultMsg != null) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: success
+                          ? const Color(0xFFD1FAE5)
+                          : const Color(0xFFFEE2E2),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      resultMsg!,
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: success
+                            ? const Color(0xFF065F46)
+                            : const Color(0xFFDC2626),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: sending
+                    ? null
+                    : () async {
+                        final email = forgotEmailCtrl.text.trim();
+                        if (email.isEmpty || !email.contains('@')) {
+                          setDialogState(() {
+                            resultMsg = 'Please enter a valid email address.';
+                            success = false;
+                          });
+                          return;
+                        }
+                        setDialogState(() => sending = true);
+                        try {
+                          final auth = context.read<AuthProvider>();
+                          await auth.forgotPassword(email);
+                          setDialogState(() {
+                            resultMsg =
+                                'If that email is registered, a reset link has been sent. Check your inbox.';
+                            success = true;
+                            sending = false;
+                          });
+                        } catch (e) {
+                          setDialogState(() {
+                            resultMsg = 'Something went wrong. Please try again.';
+                            success = false;
+                            sending = false;
+                          });
+                        }
+                      },
+                style: FilledButton.styleFrom(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+                child: sending
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Text('Send Reset Link'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    forgotEmailCtrl.dispose();
   }
 
   Future<void> _submit() async {
@@ -124,8 +266,10 @@ class _LoginScreenState extends State<LoginScreen> {
     final theme = Theme.of(context);
     final size = MediaQuery.of(context).size;
 
+    final scheme = theme.colorScheme;
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF3F4F8),
+      backgroundColor: theme.scaffoldBackgroundColor,
       resizeToAvoidBottomInset: true,
       body: SafeArea(
         child: LayoutBuilder(
@@ -190,13 +334,13 @@ class _LoginScreenState extends State<LoginScreen> {
                         width: double.infinity,
                         padding: const EdgeInsets.fromLTRB(24, 18, 24, 16),
                         decoration: BoxDecoration(
-                          color: Colors.white,
+                          color: scheme.surface,
                           borderRadius: BorderRadius.circular(32),
-                          boxShadow: const [
+                          boxShadow: [
                             BoxShadow(
-                              color: Color(0x1A000000),
+                              color: theme.shadowColor.withValues(alpha: 0.1),
                               blurRadius: 24,
-                              offset: Offset(0, 10),
+                              offset: const Offset(0, 10),
                             ),
                           ],
                         ),
@@ -210,7 +354,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 style: GoogleFonts.greatVibes(
                                   fontSize: 34,
                                   fontWeight: FontWeight.w400,
-                                  color: const Color(0xFF1F1F39),
+                                  color: scheme.onSurface,
                                 ),
                               ),
                             ),
@@ -220,7 +364,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 'Ready to continue your learning?',
                                 style: GoogleFonts.poppins(
                                   fontSize: 13,
-                                  color: const Color(0xFF858597),
+                                  color: scheme.onSurface.withValues(alpha: 0.55),
                                 ),
                                 textAlign: TextAlign.center,
                               ),
@@ -234,7 +378,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                   fontSize: 11,
                                   letterSpacing: 1.1,
                                   fontWeight: FontWeight.w600,
-                                  color: const Color(0xFF858597),
+                                  color: scheme.onSurface.withValues(alpha: 0.55),
                                 ),
                               ),
                             ),
@@ -246,7 +390,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 hintText: 'alex@example.com',
                                 prefixIcon: const Icon(Icons.email_outlined),
                                 filled: true,
-                                fillColor: const Color(0xFFF7F7FB),
+                                fillColor: scheme.surfaceContainerHighest,
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(24),
                                   borderSide: BorderSide.none,
@@ -272,7 +416,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 fontSize: 11,
                                 letterSpacing: 1.1,
                                 fontWeight: FontWeight.w600,
-                                color: const Color(0xFF858597),
+                                color: scheme.onSurface.withValues(alpha: 0.55),
                               ),
                             ),
                             const SizedBox(height: 4),
@@ -295,7 +439,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                   },
                                 ),
                                 filled: true,
-                                fillColor: const Color(0xFFF7F7FB),
+                                fillColor: scheme.surfaceContainerHighest,
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(24),
                                   borderSide: BorderSide.none,
@@ -338,7 +482,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                           overflow: TextOverflow.ellipsis,
                                           style: GoogleFonts.poppins(
                                             fontSize: 12,
-                                            color: const Color(0xFF1F1F39),
+                                            color: scheme.onSurface,
                                           ),
                                         ),
                                       ),
@@ -355,7 +499,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                     tapTargetSize:
                                         MaterialTapTargetSize.shrinkWrap,
                                   ),
-                                  onPressed: () {},
+                                  onPressed: _showForgotPasswordDialog,
                                   child: Text(
                                     'Forgot password?',
                                     style: GoogleFonts.poppins(
@@ -368,49 +512,103 @@ class _LoginScreenState extends State<LoginScreen> {
                               ],
                             ),
                             const SizedBox(height: 8),
-                            SizedBox(
-                              width: double.infinity,
-                              child: ElevatedButton(
-                                onPressed: _isLoading ? null : _submit,
-                                style: ElevatedButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 16,
+                            GestureDetector(
+                              onTapDown: (_) => setState(() => _loginPressed = true),
+                              onTapUp: (_) => setState(() => _loginPressed = false),
+                              onTapCancel: () => setState(() => _loginPressed = false),
+                              child: AnimatedScale(
+                                duration: const Duration(milliseconds: 120),
+                                scale: _loginPressed ? 0.95 : 1.0,
+                                child: SizedBox(
+                                  width: double.infinity,
+                                  child: ElevatedButton(
+                                    onPressed: _isLoading ? null : _submit,
+                                    style: ElevatedButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 16,
+                                      ),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(24),
+                                      ),
+                                      backgroundColor: scheme.primary,
+                                      foregroundColor: Colors.white,
+                                    ),
+                                    child: _isLoading
+                                        ? const SizedBox(
+                                            width: 18,
+                                            height: 18,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                              valueColor: AlwaysStoppedAnimation(
+                                                Colors.white,
+                                              ),
+                                            ),
+                                          )
+                                        : Row(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Text(
+                                                'Log in',
+                                                style: GoogleFonts.poppins(
+                                                  fontSize: 16,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 6),
+                                              const Icon(
+                                                Icons.arrow_right_alt_rounded,
+                                              ),
+                                            ],
+                                          ),
                                   ),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(24),
-                                  ),
-                                  backgroundColor: theme.colorScheme.primary,
-                                  foregroundColor: Colors.white,
                                 ),
-                                child: _isLoading
-                                    ? const SizedBox(
-                                        width: 18,
-                                        height: 18,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          valueColor: AlwaysStoppedAnimation(
-                                            Colors.white,
+                              ),
+                            ),
+                            const SizedBox(height: 24),
+                            Center(
+                              child: Consumer<ConfigProvider>(
+                                builder: (context, config, _) {
+                                  return Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Text(
+                                        "New User? ",
+                                        style: GoogleFonts.poppins(
+                                          fontSize: 14,
+                                          color: scheme.onSurface.withValues(alpha: 0.6),
+                                        ),
+                                      ),
+                                      GestureDetector(
+                                        onTap: () async {
+                                          final url = config.registrationFormUrl;
+                                          if (url.isNotEmpty) {
+                                            final uri = Uri.tryParse(url);
+                                            if (uri != null) {
+                                              await launchUrl(uri, mode: LaunchMode.externalApplication);
+                                            }
+                                          } else {
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              const SnackBar(
+                                                content: Text('Registration link not configured. Please contact the administrator.'),
+                                                backgroundColor: Color(0xFF3B82F6),
+                                              ),
+                                            );
+                                          }
+                                        },
+                                        child: Text(
+                                          'Register Here',
+                                          style: GoogleFonts.poppins(
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w700,
+                                            color: scheme.primary,
                                           ),
                                         ),
-                                      )
-                                    : Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Text(
-                                            'Log in',
-                                            style: GoogleFonts.poppins(
-                                              fontSize: 16,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                          const SizedBox(width: 6),
-                                          const Icon(
-                                            Icons.arrow_right_alt_rounded,
-                                          ),
-                                        ],
                                       ),
+                                    ],
+                                  );
+                                },
                               ),
                             ),
                           ],

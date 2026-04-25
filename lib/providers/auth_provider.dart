@@ -41,6 +41,10 @@ class AuthProvider extends ChangeNotifier {
       batchId: user.batchId,
       expertise: user.expertise,
       courseIds: courseIds,
+      streakCount: user.streakCount,
+      lastActiveDate: user.lastActiveDate,
+      coins: user.coins,
+      weeklyLogins: user.weeklyLogins,
     );
   }
 
@@ -67,7 +71,20 @@ class AuthProvider extends ChangeNotifier {
       batchId: map['batch_id']?.toString() ?? fallback?.batchId,
       expertise: _parseExpertise(map['expertise'] ?? fallback?.expertise),
       courseIds: _parseCourseIds(map, fallback: fallback?.courseIds ?? const []),
+      streakCount: (map['streak_count'] ?? fallback?.streakCount ?? 0) as int,
+      lastActiveDate: map['last_active_date'] != null
+          ? DateTime.parse(map['last_active_date'].toString())
+          : fallback?.lastActiveDate,
+      coins: (map['coins'] ?? fallback?.coins ?? 0) as int,
+      weeklyLogins: _parseWeeklyLogins(map['weekly_logins'], fallback: fallback?.weeklyLogins),
     );
+  }
+
+  List<bool> _parseWeeklyLogins(dynamic raw, {List<bool>? fallback}) {
+    if (raw is List) {
+      return raw.map((e) => e == true).toList().cast<bool>();
+    }
+    return fallback ?? const [false, false, false, false, false, false, false];
   }
 
   Future<bool> login(String email, String password) async {
@@ -94,6 +111,12 @@ class AuthProvider extends ChangeNotifier {
         batchId: json['batch_id']?.toString(),
         expertise: _parseExpertise(json['expertise']),
         courseIds: _parseCourseIds(json),
+        streakCount: (json['streak_count'] ?? 0) as int,
+        lastActiveDate: json['last_active_date'] != null
+            ? DateTime.parse(json['last_active_date'].toString())
+            : null,
+        coins: (json['coins'] ?? 0) as int,
+        weeklyLogins: _parseWeeklyLogins(json['weekly_logins']),
       );
 
       // Persist JWT token for authenticated admin endpoints if provided.
@@ -146,6 +169,21 @@ class AuthProvider extends ChangeNotifier {
     // Clear any stored token on logout.
     TokenService.removeToken();
     notifyListeners();
+  }
+
+  /// Sends a password-reset email. Always returns `true` to avoid
+  /// leaking whether an account exists for the given email address.
+  Future<bool> forgotPassword(String email) async {
+    try {
+      await _api.postJson(
+        '/auth/forgot-password',
+        {'email': email.trim().toLowerCase()},
+        requiresAuth: false,
+      );
+    } catch (_) {
+      // Silently ignore — we never reveal whether the email exists.
+    }
+    return true;
   }
 
   Future<bool> addUser({

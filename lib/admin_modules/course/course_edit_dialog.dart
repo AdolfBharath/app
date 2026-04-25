@@ -25,6 +25,9 @@ class _CourseEditDialogState extends State<CourseEditDialog> {
   late final TextEditingController _durationController;
   late final TextEditingController _ratingController;
   late final TextEditingController _priceController;
+  late final TextEditingController _moduleRewardController;
+  late final TextEditingController _quizRewardController;
+  late final TextEditingController _quizPassScoreController;
   String _difficulty = 'intermediate';
   bool _isSaving = false;
 
@@ -50,6 +53,17 @@ class _CourseEditDialogState extends State<CourseEditDialog> {
     _priceController = TextEditingController(
       text: widget.course.price.toStringAsFixed(2),
     );
+    _moduleRewardController = TextEditingController(
+      text: widget.course.modules.isNotEmpty
+          ? widget.course.modules.first.coinReward.toString()
+          : '0',
+    );
+    _quizRewardController = TextEditingController(
+      text: widget.course.quizCoinReward.toString(),
+    );
+    _quizPassScoreController = TextEditingController(
+      text: widget.course.quizPassScore.toString(),
+    );
     _difficulty = widget.course.difficulty.name;
   }
 
@@ -63,6 +77,9 @@ class _CourseEditDialogState extends State<CourseEditDialog> {
     _durationController.dispose();
     _ratingController.dispose();
     _priceController.dispose();
+    _moduleRewardController.dispose();
+    _quizRewardController.dispose();
+    _quizPassScoreController.dispose();
     super.dispose();
   }
 
@@ -71,6 +88,47 @@ class _CourseEditDialogState extends State<CourseEditDialog> {
 
     setState(() => _isSaving = true);
     try {
+      final moduleReward = int.tryParse(_moduleRewardController.text.trim()) ?? 0;
+      final quizReward = int.tryParse(_quizRewardController.text.trim()) ?? 0;
+      final quizPassScore = int.tryParse(_quizPassScoreController.text.trim()) ?? 0;
+
+      final modulePayload = widget.course.modules.map((m) {
+        return {
+          'id': m.id,
+          'orderIndex': m.orderIndex,
+          'title': m.title,
+          'description': m.description,
+          'coinReward': moduleReward,
+          'lessons': m.lessons.map((l) => {
+            'id': l.id,
+            'title': l.title,
+            'videoDriveLink': l.videoDriveLink,
+            'transcript': l.transcript,
+            'duration': l.duration,
+            'orderIndex': l.orderIndex,
+          }).toList(growable: false),
+          'studyMaterials': m.studyMaterials
+              .map((sm) => {
+                    'title': sm.title,
+                    'description': sm.description,
+                    'driveLink': sm.driveLink,
+                    'fileName': sm.fileName,
+                    'fileType': sm.fileType,
+                  })
+              .toList(growable: false),
+          'quizQuestions': m.quizQuestions
+              .map((q) => {
+                    'question': q.question,
+                    'optionA': q.optionA,
+                    'optionB': q.optionB,
+                    'optionC': q.optionC,
+                    'optionD': q.optionD,
+                    'correctAnswer': q.correctAnswer,
+                  })
+              .toList(growable: false),
+        };
+      }).toList(growable: false);
+
       final ok = await admin_api.ApiService.instance.updateCourseDetails(
         widget.course.id,
         title: _titleController.text.trim(),
@@ -86,20 +144,21 @@ class _CourseEditDialogState extends State<CourseEditDialog> {
         price:
             double.tryParse(_priceController.text.trim()) ??
             widget.course.price,
+        modules: modulePayload,
+        quizCoinReward: quizReward,
+        quizPassScore: quizPassScore,
       );
 
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            ok ? 'Course updated' : 'Update failed',
-            style: GoogleFonts.poppins(),
+      if (ok && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Course updated successfully',
+              style: GoogleFonts.poppins(),
+            ),
+            backgroundColor: const Color(0xFF10B981),
           ),
-        ),
-      );
-
-      if (ok) {
+        );
         Navigator.of(context).pop();
       }
     } finally {
@@ -226,6 +285,27 @@ class _CourseEditDialogState extends State<CourseEditDialog> {
                           prefixText: '₹ ',
                         ),
                         const SizedBox(height: 20),
+                        _buildFormField(
+                          _moduleRewardController,
+                          'Module Reward (coins)',
+                          keyboardType: TextInputType.number,
+                          optional: true,
+                        ),
+                        const SizedBox(height: 20),
+                        _buildFormField(
+                          _quizRewardController,
+                          'Quiz Reward (coins)',
+                          keyboardType: TextInputType.number,
+                          optional: true,
+                        ),
+                        const SizedBox(height: 20),
+                        _buildFormField(
+                          _quizPassScoreController,
+                          'Quiz Pass Score (optional)',
+                          keyboardType: TextInputType.number,
+                          optional: true,
+                        ),
+                        const SizedBox(height: 20),
                         _buildDifficultyField(),
                       ] else
                         Column(
@@ -253,6 +333,27 @@ class _CourseEditDialogState extends State<CourseEditDialog> {
                               ),
                               optional: true,
                               prefixText: '₹ ',
+                            ),
+                            const SizedBox(height: 20),
+                            _buildFormField(
+                              _moduleRewardController,
+                              'Module Reward (coins)',
+                              keyboardType: TextInputType.number,
+                              optional: true,
+                            ),
+                            const SizedBox(height: 20),
+                            _buildFormField(
+                              _quizRewardController,
+                              'Quiz Reward (coins)',
+                              keyboardType: TextInputType.number,
+                              optional: true,
+                            ),
+                            const SizedBox(height: 20),
+                            _buildFormField(
+                              _quizPassScoreController,
+                              'Quiz Pass Score (optional)',
+                              keyboardType: TextInputType.number,
+                              optional: true,
                             ),
                           ],
                         ),

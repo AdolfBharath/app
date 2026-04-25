@@ -13,7 +13,7 @@ import 'package:flutter/foundation.dart';
 class ApiConfig {
   /// Your machine's LAN IP — used by phones and other devices on Wi‑Fi.
   /// Update this if your local IP changes.
-  static const String _lanIp = '10.184.12.56';
+  static const String _lanIp = '10.20.31.224';
 
   static String get baseUrl {
     // Highest priority: explicit compile-time override.

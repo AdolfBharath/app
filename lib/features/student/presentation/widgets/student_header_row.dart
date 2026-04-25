@@ -41,18 +41,18 @@ class StudentHeaderRow extends StatelessWidget {
       child: Row(
         children: [
           Padding(
-            padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 2),
+            padding: const EdgeInsets.symmetric(vertical: 4),
             child: Image.asset(
-              'assets/logo.png',
-              height: 40,
+              'assets/jenovate_logo.png',
+              height: 38,
               fit: BoxFit.contain,
               errorBuilder: (_, __, ___) => Text(
                 'Jenovate',
-                style: GoogleFonts.inter(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  color: scheme.onSurface,
-                  letterSpacing: -0.5,
+                style: GoogleFonts.poppins(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                  color: const Color(0xFF2563EB),
+                  letterSpacing: -1,
                 ),
               ),
             ),
@@ -126,7 +126,7 @@ class _HeaderIconBtn extends StatelessWidget {
           decoration: BoxDecoration(
             color: scheme.surfaceContainerHighest,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: scheme.onSurface.withValues(alpha: 12)),
+            border: Border.all(color: scheme.onSurface.withAlpha(12)),
           ),
           child: Icon(icon, size: 20, color: color ?? scheme.onSurface),
         ),
@@ -163,7 +163,7 @@ class _NotificationBtn extends StatelessWidget {
               decoration: BoxDecoration(
                 color: scheme.surfaceContainerHighest,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: scheme.onSurface.withValues(alpha: 12)),
+                border: Border.all(color: scheme.onSurface.withAlpha(12)),
               ),
               child: Icon(Icons.notifications_rounded, size: 20, color: scheme.onSurface),
             ),
@@ -216,9 +216,9 @@ class _ProfileBtn extends StatelessWidget {
           width: 38,
           height: 38,
           decoration: BoxDecoration(
-            color: scheme.primary.withValues(alpha: 18),
+            color: scheme.primary.withAlpha(18),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: scheme.primary.withValues(alpha: 40)),
+            border: Border.all(color: scheme.primary.withAlpha(40)),
           ),
           child: Icon(Icons.person_rounded, size: 20, color: scheme.primary),
         ),

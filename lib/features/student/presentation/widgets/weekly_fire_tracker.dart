@@ -3,7 +3,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 /// Shows the Mon–Sun streak tracker for the **current calendar week**.
-/// An active day shows a glowing fire icon; today gets a special ring.
+/// An active day shows a glowing fire icon; today gets a special ring + glow.
 class WeeklyFireTracker extends StatelessWidget {
   const WeeklyFireTracker({
     super.key,
@@ -23,8 +23,8 @@ class WeeklyFireTracker extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final fireColor  = activeColor  ?? const Color(0xFFFF8A00); // warm orange
-    final dimColor   = inactiveColor ?? scheme.onSurface.withValues(alpha: 60);
+    final fireColor = activeColor ?? const Color(0xFFFF8A00);
+    final dimColor = inactiveColor ?? scheme.onSurface.withAlpha(60);
 
     final now = DateTime.now();
     final todayNormalized = DateTime(now.year, now.month, now.day);
@@ -40,12 +40,13 @@ class WeeklyFireTracker extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: List.generate(7, (index) {
-        final day    = days[index];
-        final lit    = loggedInOnDay(day);
-
+        final day = days[index];
+        final lit = loggedInOnDay(day);
+        final isToday = day.isAtSameMomentAs(todayNormalized);
         return _FireCell(
           label: _labels[index],
           lit: lit,
+          isToday: isToday,
           fireColor: fireColor,
           dimColor: dimColor,
           animateActive: animateActive,
@@ -59,6 +60,7 @@ class _FireCell extends StatelessWidget {
   const _FireCell({
     required this.label,
     required this.lit,
+    required this.isToday,
     required this.fireColor,
     required this.dimColor,
     required this.animateActive,
@@ -66,6 +68,7 @@ class _FireCell extends StatelessWidget {
 
   final String label;
   final bool lit;
+  final bool isToday;
   final Color fireColor;
   final Color dimColor;
   final bool animateActive;
@@ -84,9 +87,37 @@ class _FireCell extends StatelessWidget {
         shape: BoxShape.circle,
         color: lit ? fireColor : dimColor.withValues(alpha: 0.16),
         border: Border.all(
-          color: lit ? fireColor.withValues(alpha: 0.9) : dimColor.withValues(alpha: 0.35),
-          width: 1,
+          color: isToday
+              ? Colors.white.withValues(alpha: 0.92)
+              : (lit
+                  ? fireColor.withValues(alpha: 0.9)
+                  : dimColor.withValues(alpha: 0.35)),
+          width: isToday ? 2.5 : 1.0,
         ),
+        boxShadow: lit && isToday
+            ? [
+                BoxShadow(
+                  color: fireColor.withValues(alpha: 0.6),
+                  blurRadius: 12,
+                  spreadRadius: 1,
+                ),
+              ]
+            : lit
+                ? [
+                    BoxShadow(
+                      color: fireColor.withValues(alpha: 0.35),
+                      blurRadius: 6,
+                    ),
+                  ]
+                : isToday
+                    ? [
+                        BoxShadow(
+                          color: Colors.white.withValues(alpha: 0.2),
+                          blurRadius: 6,
+                          spreadRadius: 0,
+                        ),
+                      ]
+                    : null,
       ),
       alignment: Alignment.center,
       child: Icon(
@@ -118,7 +149,7 @@ class _FireCell extends StatelessWidget {
             label,
             style: GoogleFonts.inter(
               fontSize: 12,
-              fontWeight: FontWeight.w700,
+              fontWeight: isToday ? FontWeight.w800 : FontWeight.w700,
               color: lit ? activeForeground : dimColor,
             ),
           ),

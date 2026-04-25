@@ -7,8 +7,11 @@ import 'providers/auth_provider.dart';
 import 'providers/course_provider.dart';
 import 'providers/batch_provider.dart';
 import 'providers/chat_provider.dart';
+import 'providers/shop_provider.dart';
 import 'features/mentor/presentation/providers/mentor_provider.dart';
+import 'providers/config_provider.dart';
 import 'features/student/presentation/providers/student_provider.dart';
+import 'providers/question_provider.dart';
 import 'screens/add_course_screen.dart';
 import 'screens/add_user_screen.dart';
 import 'screens/manage_user_screen.dart';
@@ -32,7 +35,7 @@ import 'providers/theme_provider.dart';
 void main() {
   // On Web, allow runtime fetching so GoogleFonts can load (unless fonts are bundled).
   // On mobile/desktop, prefer bundled fonts (no network dependency).
-  GoogleFonts.config.allowRuntimeFetching = kIsWeb;
+  GoogleFonts.config.allowRuntimeFetching = true;
   runApp(const MyApp());
 }
 
@@ -47,6 +50,7 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => CourseProvider()),
         ChangeNotifierProvider(create: (_) => BatchProvider()),
+        ChangeNotifierProvider(create: (_) => ShopProvider()),
         ChangeNotifierProxyProvider<AuthProvider, MentorProvider>(
           create: (context) => MentorProvider(
             currentUser: context.read<AuthProvider>().currentUser,
@@ -60,6 +64,8 @@ class MyApp extends StatelessWidget {
         ),
         ChangeNotifierProvider(create: (_) => StudentProvider()),
         ChangeNotifierProvider(create: (_) => ChatProvider()),
+        ChangeNotifierProvider(create: (_) => ConfigProvider()),
+        ChangeNotifierProvider(create: (_) => QuestionProvider()),
       ],
       child: Consumer<ThemeProvider>(
         builder: (context, themeProvider, _) {

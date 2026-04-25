@@ -49,6 +49,8 @@ function normalizeModules(modules) {
       if (!raw || typeof raw !== 'object') return null;
       const moduleNumberRaw = raw.moduleNumber ?? raw.module_number ?? raw.order ?? (index + 1);
       const moduleNumber = Number(moduleNumberRaw);
+      const coinRewardRaw = raw.coinReward ?? raw.coin_reward ?? 0;
+      const coinReward = Number(coinRewardRaw);
       return {
         id: String(raw.id ?? ''),
         courseId: raw.courseId ?? raw.course_id ?? null,
@@ -59,6 +61,7 @@ function normalizeModules(modules) {
         videoDriveLink: String(raw.videoDriveLink ?? raw.video_drive_link ?? '').trim(),
         transcript: String(raw.transcript ?? '').trim(),
         duration: String(raw.duration ?? '').trim(),
+        coinReward: Number.isFinite(coinReward) && coinReward > 0 ? Math.floor(coinReward) : 0,
         studyMaterials: normalizeStudyMaterials(raw.studyMaterials ?? raw.study_materials),
         quizQuestions: normalizeQuizQuestions(raw.quizQuestions ?? raw.quiz_questions),
       };
@@ -72,6 +75,7 @@ function sanitizeModulesForViewer(modules, canViewVideo) {
   return normalized.map((m) => ({
     ...m,
     videoDriveLink: '',
+    quizQuestions: [],
     studyMaterials: (m.studyMaterials || []).map((material) => ({
       ...material,
       driveLink: '',
@@ -247,6 +251,10 @@ router.post('/', requireRole('admin', 'mentor'), async (req, res) => {
     mentor_id,
     mentorId,
     price,
+    quiz_coin_reward,
+    quizCoinReward,
+    quiz_pass_score,
+    quizPassScore,
   } = req.body;
 
   if (!title || !description) {
@@ -256,8 +264,8 @@ router.post('/', requireRole('admin', 'mentor'), async (req, res) => {
   try {
     const result = await pool.query(
       `INSERT INTO courses
-        (title, description, category, duration, instructor_name, module_type, thumbnail_url, rating, difficulty, modules, mentor_id, price)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        (title, description, category, duration, instructor_name, module_type, thumbnail_url, rating, difficulty, modules, mentor_id, price, quiz_coin_reward, quiz_pass_score)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
        RETURNING *`,
       [
         title,
@@ -272,6 +280,8 @@ router.post('/', requireRole('admin', 'mentor'), async (req, res) => {
         JSON.stringify(normalizeModules(modules || [])),
         req.user.role === 'mentor' ? req.user.id : (mentor_id || mentorId || null),
         price != null ? Number(price) : 0.00,
+        quizCoinReward != null ? Number(quizCoinReward) : (quiz_coin_reward != null ? Number(quiz_coin_reward) : 0),
+        quizPassScore != null ? Number(quizPassScore) : (quiz_pass_score != null ? Number(quiz_pass_score) : 0),
       ],
     );
     return res.status(201).json(result.rows[0]);
@@ -306,6 +316,10 @@ router.put('/:id', requireRole('admin', 'mentor'), async (req, res) => {
     mentorId,
     rating,
     price,
+    quiz_coin_reward,
+    quizCoinReward,
+    quiz_pass_score,
+    quizPassScore,
   } = req.body;
 
   try {
@@ -313,8 +327,14 @@ router.put('/:id', requireRole('admin', 'mentor'), async (req, res) => {
     if (existing.rowCount === 0) {
       return res.status(404).json({ message: 'Course not found' });
     }
-    if (req.user.role === 'mentor' && String(existing.rows[0].mentor_id ?? '') !== String(req.user.id)) {
-      return res.status(403).json({ message: 'Forbidden: you can only edit your own courses' });
+    // Ownership check: mentors can only edit courses where they are the assigned mentor.
+    // If mentor_id is null on the course (admin-created, not yet assigned), block access
+    // to be safe — admins bypass this check entirely.
+    if (req.user.role === 'mentor') {
+      const courseOwnerId = existing.rows[0].mentor_id;
+      if (courseOwnerId == null || String(courseOwnerId) !== String(req.user.id)) {
+        return res.status(403).json({ message: 'Forbidden: you can only edit your own courses' });
+      }
     }
 
     const updates = [];
@@ -356,9 +376,12 @@ router.put('/:id', requireRole('admin', 'mentor'), async (req, res) => {
       updates.push('instructor_name = $' + (values.length + 1));
       values.push(instructorName ?? instructor_name);
     }
-    if (mentorId !== undefined || mentor_id !== undefined) {
+    // Only update mentor_id if a non-null value is explicitly provided.
+    // Sending mentor_id: null should not clear the existing owner.
+    const newMentorId = mentorId ?? mentor_id;
+    if (newMentorId != null && newMentorId !== undefined) {
       updates.push('mentor_id = $' + (values.length + 1));
-      values.push(mentorId ?? mentor_id);
+      values.push(newMentorId);
     }
     if (rating !== undefined) {
       updates.push('rating = $' + (values.length + 1));
@@ -367,6 +390,14 @@ router.put('/:id', requireRole('admin', 'mentor'), async (req, res) => {
     if (price !== undefined) {
       updates.push('price = $' + (values.length + 1));
       values.push(Number(price));
+    }
+    if (quizCoinReward !== undefined || quiz_coin_reward !== undefined) {
+      updates.push('quiz_coin_reward = $' + (values.length + 1));
+      values.push(Number(quizCoinReward ?? quiz_coin_reward));
+    }
+    if (quizPassScore !== undefined || quiz_pass_score !== undefined) {
+      updates.push('quiz_pass_score = $' + (values.length + 1));
+      values.push(Number(quizPassScore ?? quiz_pass_score));
     }
     if (isFeatured !== undefined) {
       updates.push('is_featured = $' + (values.length + 1));
@@ -411,6 +442,287 @@ router.delete('/:id', requireRole('admin'), async (req, res) => {
     }
 
     return res.json({ message: 'Course deleted' });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: 'Server error' });
+  }
+});
+
+function parseJsonArray(value, fallback = []) {
+  if (Array.isArray(value)) return value;
+  try {
+    const parsed = JSON.parse(value || '[]');
+    return Array.isArray(parsed) ? parsed : fallback;
+  } catch (_) {
+    return fallback;
+  }
+}
+
+async function ensureStudentEnrollment(studentId, courseId) {
+  const enrollment = await pool.query(
+    `SELECT 1 FROM user_courses WHERE user_id = $1 AND course_id = $2 LIMIT 1`,
+    [studentId, courseId],
+  );
+  return enrollment.rowCount > 0;
+}
+
+async function getOrCreateProgressRow(client, studentId, courseId) {
+  const inserted = await client.query(
+    `INSERT INTO student_course_progress (student_id, course_id)
+     VALUES ($1, $2)
+     ON CONFLICT (student_id, course_id) DO NOTHING`,
+    [studentId, courseId],
+  );
+
+  const progress = await client.query(
+    `SELECT * FROM student_course_progress
+     WHERE student_id = $1 AND course_id = $2
+     FOR UPDATE`,
+    [studentId, courseId],
+  );
+
+  return progress.rows[0];
+}
+
+function lessonKeyForModule(moduleNumber, moduleItem) {
+  const title = String(moduleItem.lessonTitle || moduleItem.title || '').trim();
+  return `${moduleNumber}:${title}`;
+}
+
+router.get('/:courseId/progress', requireRole('student', 'mentor', 'admin'), async (req, res) => {
+  const { courseId } = req.params;
+
+  try {
+    const courseResult = await pool.query('SELECT id, mentor_id FROM courses WHERE id = $1 LIMIT 1', [courseId]);
+    if (courseResult.rowCount === 0) {
+      return res.status(404).json({ message: 'Course not found' });
+    }
+
+    const isStudent = req.user.role === 'student';
+    if (isStudent) {
+      const enrolled = await ensureStudentEnrollment(req.user.id, courseId);
+      if (!enrolled) {
+        return res.status(403).json({ message: 'Course access denied' });
+      }
+    }
+
+    if (req.user.role === 'mentor' && String(courseResult.rows[0].mentor_id || '') !== String(req.user.id)) {
+      return res.status(403).json({ message: 'Course access denied' });
+    }
+
+    const progressResult = await pool.query(
+      `SELECT * FROM student_course_progress WHERE student_id = $1 AND course_id = $2 LIMIT 1`,
+      [req.user.id, courseId],
+    );
+
+    const courseRow = courseResult.rows[0];
+    const modules = normalizeModules(courseRow.modules || []);
+    const totalModules = modules.length;
+    
+    const row = progressResult.rows[0];
+    const completedLessons = row ? parseJsonArray(row.completed_lessons, []) : [];
+    
+    const progressPercentage = totalModules > 0 
+      ? Math.min(100, Math.round((completedLessons.length / totalModules) * 100))
+      : 0;
+
+    return res.json({
+      completed_lessons: completedLessons,
+      completed_modules: row ? parseJsonArray(row.completed_modules, []) : [],
+      rewarded_modules: row ? parseJsonArray(row.rewarded_modules, []) : [],
+      quiz_completed: row ? Boolean(row.quiz_completed) : false,
+      quiz_reward_given: row ? Boolean(row.quiz_reward_given) : false,
+      quiz_score: row?.quiz_score ?? null,
+      progress_percentage: progressPercentage,
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: 'Server error' });
+  }
+});
+
+router.post('/:courseId/lessons/complete', requireRole('student'), async (req, res) => {
+  const { courseId } = req.params;
+  const { module_number, lesson_key } = req.body;
+  const studentId = req.user.id;
+
+  if (!module_number || !lesson_key) {
+    return res.status(400).json({ message: 'module_number and lesson_key are required' });
+  }
+
+  try {
+    const enrolled = await ensureStudentEnrollment(studentId, courseId);
+    if (!enrolled) {
+      return res.status(403).json({ message: 'Course access denied' });
+    }
+
+    const courseResult = await pool.query(
+      `SELECT id, modules FROM courses WHERE id = $1 LIMIT 1`,
+      [courseId],
+    );
+    if (courseResult.rowCount === 0) {
+      return res.status(404).json({ message: 'Course not found' });
+    }
+
+    const moduleNumber = Number(module_number);
+    const modules = normalizeModules(courseResult.rows[0].modules || []);
+    const targetModuleLessons = modules.filter((m) => Number(m.moduleNumber) === moduleNumber);
+    if (targetModuleLessons.length === 0) {
+      return res.status(404).json({ message: 'Module not found' });
+    }
+
+    const expectedLessonKeys = targetModuleLessons.map((m) => lessonKeyForModule(moduleNumber, m));
+    if (!expectedLessonKeys.includes(String(lesson_key))) {
+      return res.status(400).json({ message: 'Invalid lesson key for module' });
+    }
+
+    const moduleReward = Number(targetModuleLessons[0].coinReward || 0);
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const progress = await getOrCreateProgressRow(client, studentId, courseId);
+      const completedLessons = parseJsonArray(progress.completed_lessons, []).map(String);
+      const completedModules = parseJsonArray(progress.completed_modules, []).map((v) => Number(v));
+      const rewardedModules = parseJsonArray(progress.rewarded_modules, []).map((v) => Number(v));
+
+      let rewardGranted = 0;
+      let moduleCompletedNow = false;
+
+      if (!completedLessons.includes(String(lesson_key))) {
+        completedLessons.push(String(lesson_key));
+      }
+
+      const moduleIsComplete = expectedLessonKeys.every((k) => completedLessons.includes(k));
+      if (moduleIsComplete && !completedModules.includes(moduleNumber)) {
+        completedModules.push(moduleNumber);
+        moduleCompletedNow = true;
+      }
+
+      if (moduleIsComplete && moduleReward > 0 && !rewardedModules.includes(moduleNumber)) {
+        rewardedModules.push(moduleNumber);
+        rewardGranted = moduleReward;
+        await client.query(
+          `UPDATE users SET coins = COALESCE(coins, 0) + $2, updated_at = NOW() WHERE id = $1`,
+          [studentId, moduleReward],
+        );
+      }
+
+      await client.query(
+        `UPDATE student_course_progress
+         SET completed_lessons = $3::jsonb,
+             completed_modules = $4::jsonb,
+             rewarded_modules = $5::jsonb,
+             updated_at = NOW()
+         WHERE student_id = $1 AND course_id = $2`,
+        [
+          studentId,
+          courseId,
+          JSON.stringify(completedLessons),
+          JSON.stringify(completedModules),
+          JSON.stringify(rewardedModules),
+        ],
+      );
+
+      const userCoins = await client.query('SELECT coins FROM users WHERE id = $1', [studentId]);
+
+      await client.query('COMMIT');
+
+      return res.json({
+        module_completed_now: moduleCompletedNow,
+        reward_granted: rewardGranted,
+        completed_lessons: completedLessons,
+        completed_modules: completedModules,
+        rewarded_modules: rewardedModules,
+        coins: Number(userCoins.rows[0]?.coins || 0),
+      });
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: 'Server error' });
+  }
+});
+
+router.post('/:courseId/quiz/complete', requireRole('student'), async (req, res) => {
+  const { courseId } = req.params;
+  const { score, total } = req.body;
+  const studentId = req.user.id;
+
+  try {
+    const enrolled = await ensureStudentEnrollment(studentId, courseId);
+    if (!enrolled) {
+      return res.status(403).json({ message: 'Course access denied' });
+    }
+
+    const courseResult = await pool.query(
+      `SELECT id, modules, quiz_coin_reward, quiz_pass_score FROM courses WHERE id = $1 LIMIT 1`,
+      [courseId],
+    );
+    if (courseResult.rowCount === 0) {
+      return res.status(404).json({ message: 'Course not found' });
+    }
+
+    const course = courseResult.rows[0];
+    const modules = normalizeModules(course.modules || []);
+    const quizCount = modules.reduce((sum, m) => sum + (Array.isArray(m.quizQuestions) ? m.quizQuestions.length : 0), 0);
+    if (quizCount < 20) {
+      return res.status(400).json({ message: 'Quiz requires at least 20 questions' });
+    }
+
+    const parsedScore = Number(score || 0);
+    const parsedTotal = Number(total || 0);
+    const passScore = Number(course.quiz_pass_score || 0);
+    const passed = passScore > 0 ? parsedScore >= passScore : parsedScore > 0;
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const progress = await getOrCreateProgressRow(client, studentId, courseId);
+
+      let rewardGranted = 0;
+      const alreadyRewarded = Boolean(progress.quiz_reward_given);
+      if (passed && !alreadyRewarded && Number(course.quiz_coin_reward || 0) > 0) {
+        rewardGranted = Number(course.quiz_coin_reward);
+        await client.query(
+          `UPDATE users SET coins = COALESCE(coins, 0) + $2, updated_at = NOW() WHERE id = $1`,
+          [studentId, rewardGranted],
+        );
+      }
+
+      await client.query(
+        `UPDATE student_course_progress
+         SET quiz_completed = TRUE,
+             quiz_reward_given = CASE WHEN quiz_reward_given = TRUE THEN TRUE ELSE $3 END,
+             quiz_score = $4,
+             updated_at = NOW()
+         WHERE student_id = $1 AND course_id = $2`,
+        [studentId, courseId, passed && rewardGranted > 0, parsedScore],
+      );
+
+      const userCoins = await client.query('SELECT coins FROM users WHERE id = $1', [studentId]);
+
+      await client.query('COMMIT');
+
+      return res.json({
+        passed,
+        reward_granted: rewardGranted,
+        quiz_completed: true,
+        coins: Number(userCoins.rows[0]?.coins || 0),
+        score: parsedScore,
+        total: parsedTotal,
+      });
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
   } catch (err) {
     console.error(err);
     return res.status(500).json({ message: 'Server error' });

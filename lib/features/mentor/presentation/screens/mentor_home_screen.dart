@@ -12,7 +12,10 @@ import 'manage_batch_screen.dart';
 import 'manage_course_screen.dart';
 import 'mentor_create_announcement_screen.dart';
 import 'mentor_notifications_screen.dart';
+import 'mentor_notifications_screen.dart';
 import 'mentor_profile_screen.dart';
+import '../../../../models/question.dart';
+import '../../../../config/theme.dart';
 
 class MentorHomeScreen extends StatefulWidget {
   const MentorHomeScreen({super.key});
@@ -54,7 +57,7 @@ class _MentorHomeScreenState extends State<MentorHomeScreen> {
     ];
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: LmsAdminTheme.backgroundLight,
       body: IndexedStack(index: _currentIndex, children: pages),
       bottomNavigationBar: MentorBottomNav(
         currentIndex: _currentIndex,
@@ -90,6 +93,12 @@ class _MentorDashboardState extends State<_MentorDashboard> {
     final authUser = context.watch<AuthProvider>().currentUser;
     final expertise = authUser?.expertise ?? const <String>[];
 
+    final filteredQuestions = provider.questions.where((q) {
+      if (_questionFilter == 'Pending') return q.status == QuestionStatus.pending;
+      if (_questionFilter == 'Replied') return q.status == QuestionStatus.replied;
+      return true;
+    }).toList();
+
     return SafeArea(
       child: RefreshIndicator(
         onRefresh: provider.loadAll,
@@ -102,17 +111,40 @@ class _MentorDashboardState extends State<_MentorDashboard> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      crossAxisAlignment: CrossAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          'Dashboard',
-                          style: GoogleFonts.poppins(
-                            fontSize: 26,
-                            fontWeight: FontWeight.w700,
-                            color: const Color(0xFF0F172A),
+                        Container(
+                          margin: const EdgeInsets.only(top: 4),
+                          width: 4,
+                          height: 30,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF3B82F6),
+                            borderRadius: BorderRadius.circular(999),
                           ),
                         ),
+                        const SizedBox(width: 12),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Mentor Dashboard',
+                              style: GoogleFonts.poppins(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w700,
+                                color: LmsAdminTheme.textDark,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Platform overview & management',
+                              style: GoogleFonts.poppins(
+                                fontSize: 12,
+                                color: const Color(0xFF94A3B8),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const Spacer(),
                         Row(
                           children: [
                             _HeaderActionIcon(
@@ -125,7 +157,7 @@ class _MentorDashboardState extends State<_MentorDashboard> {
                                 );
                               },
                             ),
-                            const SizedBox(width: 4),
+                            const SizedBox(width: 8),
                             Stack(
                               clipBehavior: Clip.none,
                               children: [
@@ -141,26 +173,21 @@ class _MentorDashboardState extends State<_MentorDashboard> {
                                 ),
                                 if (provider.notifications.isNotEmpty)
                                   Positioned(
-                                    right: 4,
-                                    top: 2,
+                                    right: -2,
+                                    top: -2,
                                     child: Container(
-                                      width: 8,
-                                      height: 8,
-                                      decoration: const BoxDecoration(
-                                        color: Color(0xFFEF4444),
+                                      width: 10,
+                                      height: 10,
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFEF4444),
                                         shape: BoxShape.circle,
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: Color(0xFFEF4444),
-                                            blurRadius: 2,
-                                          ),
-                                        ],
+                                        border: Border.all(color: Colors.white, width: 2),
                                       ),
                                     ),
                                   ),
                               ],
                             ),
-                            const SizedBox(width: 4),
+                            const SizedBox(width: 8),
                             _HeaderActionIcon(
                               icon: Icons.logout_rounded,
                               onTap: () {
@@ -188,23 +215,29 @@ class _MentorDashboardState extends State<_MentorDashboard> {
                     const SizedBox(height: 16),
                     _ExpertiseCard(username: username, expertise: expertise),
                     const SizedBox(height: 28),
+                    const SizedBox(height: 32),
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
+                        Container(
+                          width: 4,
+                          height: 24,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF3B82F6),
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
                         Text(
                           'Recent Questions',
                           style: GoogleFonts.poppins(
                             fontSize: 16,
                             fontWeight: FontWeight.w700,
-                            color: const Color(0xFF0F172A),
+                            color: LmsAdminTheme.textDark,
                           ),
                         ),
+                        const Spacer(),
                         TextButton(
                           onPressed: () {},
-                          style: TextButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(horizontal: 8),
-                          ),
                           child: Text(
                             'View All',
                             style: GoogleFonts.poppins(
@@ -245,45 +278,70 @@ class _MentorDashboardState extends State<_MentorDashboard> {
             ),
             SliverPadding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              sliver: SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  (context, index) =>
-                      QuestionCard(question: provider.questions[index]),
-                  childCount: provider.questions.length,
-                ),
-              ),
+              sliver: filteredQuestions.isEmpty
+                  ? SliverToBoxAdapter(
+                      child: Container(
+                        padding: const EdgeInsets.all(32),
+                        decoration: LmsAdminTheme.adminCardDecoration(context),
+                        child: Column(
+                          children: [
+                            Icon(Icons.question_answer_outlined, size: 48, color: Colors.grey[300]),
+                            const SizedBox(height: 12),
+                            Text(
+                              'No ${_questionFilter.toLowerCase()} questions',
+                              style: GoogleFonts.poppins(
+                                fontWeight: FontWeight.w600,
+                                color: Colors.grey[500],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  : SliverList(
+                      delegate: SliverChildBuilderDelegate(
+                        (context, index) =>
+                            QuestionCard(question: filteredQuestions[index]),
+                        childCount: filteredQuestions.length,
+                      ),
+                    ),
             ),
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 28, 16, 0),
                 child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    Text(
-                      'Projects to Review',
-                      style: GoogleFonts.poppins(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        color: const Color(0xFF0F172A),
-                      ),
-                    ),
-                    TextButton(
-                      onPressed: () {},
-                      style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                      ),
-                      child: Text(
-                        'View All',
-                        style: GoogleFonts.poppins(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: const Color(0xFF3B82F6),
+                        Container(
+                          width: 4,
+                          height: 24,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF3B82F6),
+                            borderRadius: BorderRadius.circular(999),
+                          ),
                         ),
-                      ),
+                        const SizedBox(width: 10),
+                        Text(
+                          'Projects to Review',
+                          style: GoogleFonts.poppins(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: LmsAdminTheme.textDark,
+                          ),
+                        ),
+                        const Spacer(),
+                        TextButton(
+                          onPressed: () {},
+                          child: Text(
+                            'View All',
+                            style: GoogleFonts.poppins(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: const Color(0xFF3B82F6),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
               ),
             ),
             SliverToBoxAdapter(
@@ -340,43 +398,24 @@ class _ExpertiseCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        gradient: LinearGradient(
-          colors: [
-            const Color(0xFF3B82F6).withOpacity(0.08),
-            const Color(0xFF1E40AF).withOpacity(0.04),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        border: Border.all(color: const Color(0xFFDBEAFE), width: 1),
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.02),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
+      padding: const EdgeInsets.all(20),
+      decoration: LmsAdminTheme.adminCardDecoration(context),
       child: Row(
         children: [
           Container(
-            width: 50,
-            height: 50,
+            width: 56,
+            height: 56,
             decoration: BoxDecoration(
               color: const Color(0xFFEFF6FF),
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(16),
             ),
             child: const Icon(
-              Icons.school_rounded,
+              Icons.face_retouching_natural_rounded,
               color: Color(0xFF3B82F6),
-              size: 28,
+              size: 32,
             ),
           ),
-          const SizedBox(width: 14),
+          const SizedBox(width: 16),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -384,29 +423,29 @@ class _ExpertiseCard extends StatelessWidget {
                 Text(
                   username,
                   style: GoogleFonts.poppins(
-                    fontSize: 14,
+                    fontSize: 16,
                     fontWeight: FontWeight.w700,
-                    color: const Color(0xFF0F172A),
+                    color: LmsAdminTheme.textDark,
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: 2),
+                const SizedBox(height: 4),
                 Text(
-                  'Mentor • Full-Stack Developer',
+                  'Professional Mentor',
                   style: GoogleFonts.poppins(
-                    fontSize: 11,
+                    fontSize: 12,
                     fontWeight: FontWeight.w500,
-                    color: const Color(0xFF64748B),
+                    color: LmsAdminTheme.textSecondary,
                   ),
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 10),
                 Wrap(
-                  spacing: 4,
-                  runSpacing: 0,
+                  spacing: 6,
+                  runSpacing: 6,
                   children: (expertise.isEmpty
-                          ? const <String>['Mentor']
-                          : expertise.take(6).toList())
+                          ? const <String>['Verified Mentor']
+                          : expertise.take(4).toList())
                       .map(_TagChip.new)
                       .toList(),
                 ),

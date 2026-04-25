@@ -203,7 +203,7 @@ class HeroWeeklyFooter extends StatelessWidget {
           WeeklyFireTracker(
             loggedInOnDay: loggedInOnDay,
             activeColor: const Color(0xFFFF8A00),
-            inactiveColor: Colors.white.withValues(alpha: 80),
+            inactiveColor: Colors.white.withAlpha(80),
           ),
         ],
       ),

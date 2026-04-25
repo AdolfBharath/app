@@ -74,7 +74,7 @@ class _StudentBatchScreenState extends State<StudentBatchScreen> {
                       style: GoogleFonts.inter(
                         fontSize: 12,
                         fontWeight: FontWeight.w500,
-                        color: scheme.onSurface.withValues(alpha: 160),
+                        color: scheme.onSurface.withAlpha(160),
                       ),
                     ),
                     const SizedBox(height: 20),
@@ -178,10 +178,10 @@ class _StudentBatchScreenState extends State<StudentBatchScreen> {
                         color: scheme.surface,
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(
-                            color: scheme.onSurface.withValues(alpha: 10)),
+                            color: scheme.onSurface.withAlpha(10)),
                         boxShadow: [
                           BoxShadow(
-                            color: theme.shadowColor.withValues(alpha: 8),
+                            color: theme.shadowColor.withAlpha(8),
                             blurRadius: 16,
                             offset: const Offset(0, 6),
                           ),
@@ -198,7 +198,7 @@ class _StudentBatchScreenState extends State<StudentBatchScreen> {
                               style: GoogleFonts.inter(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w500,
-                                color: scheme.onSurface.withValues(alpha: 160),
+                                color: scheme.onSurface.withAlpha(160),
                               ),
                             ),
                           ),
@@ -219,11 +219,11 @@ class _StudentBatchScreenState extends State<StudentBatchScreen> {
                             children: [
                               Icon(Icons.groups_2_outlined,
                                   size: 40,
-                                  color: scheme.onSurface.withValues(alpha: 80)),
+                                  color: scheme.onSurface.withAlpha(80)),
                               const SizedBox(height: 8),
                               Text('No batches available yet',
                                   style: GoogleFonts.inter(
-                                    color: scheme.onSurface.withValues(alpha: 160),
+                                    color: scheme.onSurface.withAlpha(160),
                                   )),
                             ],
                           ),
@@ -280,7 +280,7 @@ class _BatchHeroCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: gradColors[0].withValues(alpha: 70),
+            color: gradColors[0].withAlpha(70),
             blurRadius: 24,
             offset: const Offset(0, 10),
           ),
@@ -293,9 +293,9 @@ class _BatchHeroCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 28),
+              color: Colors.white.withAlpha(28),
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Colors.white.withValues(alpha: 50)),
+              border: Border.all(color: Colors.white.withAlpha(50)),
             ),
             child: Text(
               myBatch != null ? 'Active Batch' : 'No Batch Assigned',
@@ -358,9 +358,9 @@ class _StatBubble extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 22),
+        color: Colors.white.withAlpha(22),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withValues(alpha: 36)),
+        border: Border.all(color: Colors.white.withAlpha(36)),
       ),
       child: Row(
         children: [
@@ -382,7 +382,7 @@ class _StatBubble extends StatelessWidget {
                 style: GoogleFonts.inter(
                   fontSize: 10,
                   fontWeight: FontWeight.w600,
-                  color: Colors.white.withValues(alpha: 200),
+                  color: Colors.white.withAlpha(200),
                 ),
               ),
             ],
@@ -433,10 +433,10 @@ class _QuickActionCardState extends State<_QuickActionCard> {
           decoration: BoxDecoration(
             color: scheme.surface,
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: scheme.onSurface.withValues(alpha: 10)),
+            border: Border.all(color: scheme.onSurface.withAlpha(10)),
             boxShadow: [
               BoxShadow(
-                color: theme.shadowColor.withValues(alpha: 8),
+                color: theme.shadowColor.withAlpha(8),
                 blurRadius: 14,
                 offset: const Offset(0, 5),
               ),
@@ -468,7 +468,7 @@ class _QuickActionCardState extends State<_QuickActionCard> {
                 style: GoogleFonts.inter(
                   fontSize: 11,
                   fontWeight: FontWeight.w500,
-                  color: scheme.onSurface.withValues(alpha: 160),
+                  color: scheme.onSurface.withAlpha(160),
                 ),
               ),
             ],
@@ -497,11 +497,11 @@ class _BatchListCard extends StatelessWidget {
         color: scheme.surface,
         borderRadius: BorderRadius.circular(18),
         border: Border.all(
-          color: isMine ? accent.withValues(alpha: 40) : scheme.onSurface.withValues(alpha: 10),
+          color: isMine ? accent.withAlpha(40) : scheme.onSurface.withAlpha(10),
         ),
         boxShadow: [
           BoxShadow(
-            color: Theme.of(context).shadowColor.withValues(alpha: 6),
+            color: Theme.of(context).shadowColor.withAlpha(6),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -513,7 +513,7 @@ class _BatchListCard extends StatelessWidget {
           width: 42,
           height: 42,
           decoration: BoxDecoration(
-            color: accent.withValues(alpha: 18),
+            color: accent.withAlpha(18),
             borderRadius: BorderRadius.circular(14),
           ),
           child: Icon(
@@ -531,14 +531,14 @@ class _BatchListCard extends StatelessWidget {
           style: GoogleFonts.inter(
             fontSize: 11,
             fontWeight: FontWeight.w600,
-            color: isMine ? accent : scheme.onSurface.withValues(alpha: 140),
+            color: isMine ? accent : scheme.onSurface.withAlpha(140),
           ),
         ),
         trailing: isMine
             ? Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: accent.withValues(alpha: 16),
+                  color: accent.withAlpha(16),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
@@ -551,7 +551,7 @@ class _BatchListCard extends StatelessWidget {
                 ),
               )
             : Icon(Icons.arrow_forward_ios_rounded,
-                size: 14, color: scheme.onSurface.withValues(alpha: 140)),
+                size: 14, color: scheme.onSurface.withAlpha(140)),
       ),
     );
   }

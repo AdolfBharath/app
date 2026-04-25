@@ -5,19 +5,7 @@ import '../../../../models/course.dart';
 import '../../../../models/user.dart';
 import '../../../../services/api_service.dart';
 
-class MentorQuestion {
-  MentorQuestion({
-    required this.id,
-    required this.studentName,
-    required this.preview,
-    required this.timestamp,
-  });
-
-  final String id;
-  final String studentName;
-  final String preview;
-  final DateTime timestamp;
-}
+import '../../../../models/question.dart';
 
 class MentorProject {
   MentorProject({
@@ -54,7 +42,7 @@ class MentorProvider extends ChangeNotifier {
 
   final List<Course> _courses = [];
   final List<Batch> _batches = [];
-  final List<MentorQuestion> _questions = [];
+  final List<Question> _questions = [];
   final List<MentorProject> _projects = [];
   final List<MentorNotification> _notifications = [];
 
@@ -66,7 +54,7 @@ class MentorProvider extends ChangeNotifier {
 
   List<Course> get courses => List.unmodifiable(_courses);
   List<Batch> get batches => List.unmodifiable(_batches);
-  List<MentorQuestion> get questions => List.unmodifiable(_questions);
+  List<Question> get questions => List.unmodifiable(_questions);
   List<MentorProject> get projects => List.unmodifiable(_projects);
   List<MentorNotification> get notifications =>
       List.unmodifiable(_notifications);
@@ -131,8 +119,14 @@ class MentorProvider extends ChangeNotifier {
         ..clear()
         ..addAll(resolvedBatches);
 
-      // Questions feed removed: no backend /questions endpoint exists.
-      // _questions intentionally left empty until a questions feature is built.
+      try {
+        final fetchedQuestions = await api.getQuestions(mentorId: currentUser.id);
+        _questions
+          ..clear()
+          ..addAll(fetchedQuestions);
+      } catch (_) {
+        _questions.clear();
+      }
 
       _projects
         ..clear()
@@ -166,6 +160,24 @@ class MentorProvider extends ChangeNotifier {
     } finally {
       _isLoading = false;
       notifyListeners();
+    }
+  }
+
+  Future<bool> replyToQuestion(String questionId, String reply) async {
+    try {
+      final updated = await ApiService.instance.replyToQuestion(
+        questionId: questionId,
+        reply: reply,
+      );
+      final index = _questions.indexWhere((q) => q.id == questionId);
+      if (index != -1) {
+        _questions[index] = updated;
+        notifyListeners();
+      }
+      return true;
+    } catch (e) {
+      debugPrint('Error replying to question: $e');
+      return false;
     }
   }
 }

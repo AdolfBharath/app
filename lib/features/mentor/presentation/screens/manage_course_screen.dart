@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
@@ -10,6 +9,15 @@ import '../../../../screens/login_screen.dart';
 import 'mentor_create_announcement_screen.dart';
 import 'mentor_notifications_screen.dart';
 import '../providers/mentor_provider.dart';
+import '../../../../config/theme.dart';
+
+bool _isValidDriveLink(String link) {
+  final trimmed = link.trim();
+  if (trimmed.isEmpty) return false;
+  final uri = Uri.tryParse(trimmed);
+  if (uri == null) return false;
+  return uri.host.toLowerCase().contains('drive.google.com');
+}
 
 class ManageCourseScreen extends StatefulWidget {
   const ManageCourseScreen({super.key, required this.username});
@@ -114,7 +122,7 @@ class _ManageCourseScreenState extends State<ManageCourseScreen> {
 
     return SafeArea(
       child: Scaffold(
-        backgroundColor: Colors.white,
+        backgroundColor: LmsAdminTheme.backgroundLight,
         body: CustomScrollView(
           slivers: [
             SliverToBoxAdapter(
@@ -124,16 +132,40 @@ class _ManageCourseScreenState extends State<ManageCourseScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          'Courses',
-                          style: GoogleFonts.poppins(
-                            fontSize: 26,
-                            fontWeight: FontWeight.w700,
-                            color: const Color(0xFF0F172A),
+                        Container(
+                          margin: const EdgeInsets.only(top: 4),
+                          width: 4,
+                          height: 30,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF3B82F6),
+                            borderRadius: BorderRadius.circular(999),
                           ),
                         ),
+                        const SizedBox(width: 12),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Courses',
+                              style: GoogleFonts.poppins(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w700,
+                                color: LmsAdminTheme.textDark,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Manage curriculum & content',
+                              style: GoogleFonts.poppins(
+                                fontSize: 12,
+                                color: const Color(0xFF94A3B8),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const Spacer(),
                         Row(
                           children: [
                             _MentorActionIcon(
@@ -146,7 +178,7 @@ class _ManageCourseScreenState extends State<ManageCourseScreen> {
                                 );
                               },
                             ),
-                            const SizedBox(width: 4),
+                            const SizedBox(width: 8),
                             _MentorActionIcon(
                               icon: Icons.notifications_none_rounded,
                               onTap: () {
@@ -157,7 +189,7 @@ class _ManageCourseScreenState extends State<ManageCourseScreen> {
                                 );
                               },
                             ),
-                            const SizedBox(width: 4),
+                            const SizedBox(width: 8),
                             _MentorActionIcon(
                               icon: Icons.logout_rounded,
                               onTap: () {
@@ -175,30 +207,8 @@ class _ManageCourseScreenState extends State<ManageCourseScreen> {
                     ),
                     const SizedBox(height: 24),
                     Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        border: Border.all(
-                          color: const Color(0xFFDBEAFE),
-                          width: 1,
-                        ),
-                        gradient: LinearGradient(
-                          colors: [
-                            const Color(0xFF3B82F6).withOpacity(0.04),
-                            const Color(0xFF1E40AF).withOpacity(0.02),
-                          ],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                        borderRadius: BorderRadius.circular(18),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.02),
-                            blurRadius: 6,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
+                      padding: const EdgeInsets.all(20),
+                      decoration: LmsAdminTheme.adminCardDecoration(context),
                       child: Row(
                         children: [
                           Container(
@@ -450,19 +460,8 @@ class _CourseItemCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: LmsAdminTheme.adminCardDecoration(context),
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Column(
@@ -979,93 +978,116 @@ class _EditCourseBottomSheetState extends State<_EditCourseBottomSheet> {
   }
 
   Future<void> _addOrEditModule({_EditableModule? module, int? index}) async {
-    final moduleNumber = TextEditingController(
-      text: (module?.moduleNumber ?? (_modules.length + 1)).toString(),
+    final orderIndex = TextEditingController(
+      text: (module?.orderIndex ?? (_modules.length + 1)).toString(),
     );
     final title = TextEditingController(text: module?.title ?? '');
     final moduleDescription = TextEditingController(text: module?.description ?? '');
-    final lessonTitle = TextEditingController(text: module?.lessonTitle ?? module?.title ?? '');
-    final drive = TextEditingController(text: module?.videoDriveLink ?? '');
-    final transcript = TextEditingController(text: module?.transcript ?? '');
-    final duration = TextEditingController(text: module?.duration ?? '');
+    final coinReward = TextEditingController(text: (module?.coinReward ?? 0).toString());
+    
+    // Copy lessons to edit locally
+    List<_EditableLesson> localLessons = List<_EditableLesson>.from(module?.lessons ?? []);
 
     final saved = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(module == null ? 'Add Module' : 'Edit Module'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: moduleNumber,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Module Number'),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setLocal) => AlertDialog(
+          title: Text(module == null ? 'Add Module' : 'Edit Module'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: orderIndex,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(labelText: 'Module Order Index'),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: title,
+                    decoration: const InputDecoration(labelText: 'Module Title'),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: moduleDescription,
+                    minLines: 2,
+                    maxLines: 4,
+                    decoration: const InputDecoration(labelText: 'Module Description'),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: coinReward,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(labelText: 'Module Reward (coins)'),
+                  ),
+                  const SizedBox(height: 20),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('Lessons', style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
+                      IconButton(
+                        icon: const Icon(Icons.add_circle_outline),
+                        onPressed: () async {
+                          final newLesson = await _addOrEditLessonDialog(context);
+                          if (newLesson != null) {
+                            setLocal(() => localLessons.add(newLesson));
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+                  if (localLessons.isEmpty)
+                    const Text('No lessons added yet.', style: TextStyle(fontSize: 12, color: Colors.grey))
+                  else
+                    ...localLessons.asMap().entries.map((entry) {
+                      final lIdx = entry.key;
+                      final l = entry.value;
+                      return ListTile(
+                        title: Text(l.title, style: const TextStyle(fontSize: 14)),
+                        subtitle: Text(l.duration, style: const TextStyle(fontSize: 12)),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.edit_outlined, size: 18),
+                              onPressed: () async {
+                                final edited = await _addOrEditLessonDialog(context, lesson: l);
+                                if (edited != null) {
+                                  setLocal(() => localLessons[lIdx] = edited);
+                                }
+                              },
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline, size: 18),
+                              onPressed: () => setLocal(() => localLessons.removeAt(lIdx)),
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                ],
               ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: title,
-                decoration: const InputDecoration(labelText: 'Module Title'),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: moduleDescription,
-                minLines: 2,
-                maxLines: 4,
-                decoration: const InputDecoration(labelText: 'Module Description'),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: lessonTitle,
-                decoration: const InputDecoration(labelText: 'Lesson Title'),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: duration,
-                decoration: const InputDecoration(labelText: 'Duration (e.g. 14m)'),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: drive,
-                decoration: const InputDecoration(
-                  labelText: 'Google Drive Video Link',
-                  hintText: 'https://drive.google.com/file/d/XXXXX/view',
-                ),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: transcript,
-                minLines: 2,
-                maxLines: 4,
-                decoration: const InputDecoration(labelText: 'Transcript / Notes'),
-              ),
-            ],
+            ),
           ),
+          actions: [
+            TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
+            FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Save')),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Save'),
-          ),
-        ],
       ),
     );
 
     if (saved == true) {
-      final parsedModuleNumber = int.tryParse(moduleNumber.text.trim()) ?? (_modules.length + 1);
+      final parsedOrderIndex = int.tryParse(orderIndex.text.trim()) ?? (_modules.length + 1);
       final next = _EditableModule(
         id: module?.id ?? '',
-        moduleNumber: parsedModuleNumber,
+        orderIndex: parsedOrderIndex,
         title: title.text.trim(),
         description: moduleDescription.text.trim(),
-        lessonTitle: lessonTitle.text.trim(),
-        videoDriveLink: drive.text.trim(),
-        transcript: transcript.text.trim(),
-        duration: duration.text.trim(),
+        lessons: localLessons,
+        coinReward: int.tryParse(coinReward.text.trim()) ?? 0,
         studyMaterials: List<_StudyMaterialDraft>.from(module?.studyMaterials ?? const []),
         quizQuestions: List<_QuizQuestionDraft>.from(module?.quizQuestions ?? const []),
       );
@@ -1077,13 +1099,63 @@ class _EditCourseBottomSheetState extends State<_EditCourseBottomSheet> {
         }
       });
     }
-    moduleNumber.dispose();
+
+    orderIndex.dispose();
     title.dispose();
     moduleDescription.dispose();
-    lessonTitle.dispose();
-    drive.dispose();
-    transcript.dispose();
-    duration.dispose();
+    coinReward.dispose();
+  }
+
+  Future<_EditableLesson?> _addOrEditLessonDialog(BuildContext context, {_EditableLesson? lesson}) async {
+    final title = TextEditingController(text: lesson?.title ?? '');
+    final drive = TextEditingController(text: lesson?.videoDriveLink ?? '');
+    final transcript = TextEditingController(text: lesson?.transcript ?? '');
+    final duration = TextEditingController(text: lesson?.duration ?? '');
+    final order = TextEditingController(text: (lesson?.orderIndex ?? 1).toString());
+
+    return showDialog<_EditableLesson>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(lesson == null ? 'Add Lesson' : 'Edit Lesson'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(controller: title, decoration: const InputDecoration(labelText: 'Lesson Title')),
+              const SizedBox(height: 10),
+              TextField(controller: order, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Order Index')),
+              const SizedBox(height: 10),
+              TextField(controller: drive, decoration: const InputDecoration(labelText: 'Google Drive Link')),
+              const SizedBox(height: 10),
+              TextField(controller: duration, decoration: const InputDecoration(labelText: 'Duration (e.g. 10m)')),
+              const SizedBox(height: 10),
+              TextField(controller: transcript, minLines: 2, maxLines: 4, decoration: const InputDecoration(labelText: 'Transcript')),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(null), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () {
+              final link = drive.text.trim();
+              if (link.isNotEmpty && !_isValidDriveLink(link)) {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Invalid Drive link')));
+                return;
+              }
+              Navigator.of(context).pop(_EditableLesson(
+                id: lesson?.id ?? '',
+                title: title.text.trim(),
+                videoDriveLink: link,
+                transcript: transcript.text.trim(),
+                duration: duration.text.trim(),
+                orderIndex: int.tryParse(order.text.trim()) ?? 1,
+              ));
+            },
+            child: const Text('Save Lesson'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _save() async {
@@ -1198,7 +1270,7 @@ class _EditCourseBottomSheetState extends State<_EditCourseBottomSheet> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text(
-                            'Modules / Lessons',
+                            'Modules',
                             style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w700),
                           ),
                           OutlinedButton.icon(
@@ -1211,68 +1283,102 @@ class _EditCourseBottomSheetState extends State<_EditCourseBottomSheet> {
                       const SizedBox(height: 8),
                       if (_modules.isEmpty)
                         Text(
-                          'No modules yet. Add module lessons with Google Drive video links.',
+                          'No modules yet. Add modules and lessons with Google Drive video links.',
                           style: GoogleFonts.poppins(fontSize: 12, color: const Color(0xFF64748B)),
                         )
                       else
-                        ..._modules.asMap().entries.map((entry) {
-                          final idx = entry.key;
-                          final module = entry.value;
-                          return Container(
-                            margin: const EdgeInsets.only(bottom: 10),
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: const Color(0xFFE2E8F0)),
-                            ),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                        ReorderableListView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: _modules.length,
+                          onReorder: (oldIndex, newIndex) {
+                            setState(() {
+                              if (newIndex > oldIndex) newIndex -= 1;
+                              final item = _modules.removeAt(oldIndex);
+                              _modules.insert(newIndex, item);
+                              // Update order indices
+                              for (int i = 0; i < _modules.length; i++) {
+                                final m = _modules[i];
+                                _modules[i] = _EditableModule(
+                                  id: m.id,
+                                  orderIndex: i + 1,
+                                  title: m.title,
+                                  description: m.description,
+                                  lessons: m.lessons,
+                                  coinReward: m.coinReward,
+                                  studyMaterials: m.studyMaterials,
+                                  quizQuestions: m.quizQuestions,
+                                );
+                              }
+                            });
+                          },
+                          itemBuilder: (context, idx) {
+                            final module = _modules[idx];
+                            return Container(
+                              key: ValueKey(module.id.isNotEmpty ? module.id : 'temp_$idx'),
+                              margin: const EdgeInsets.only(bottom: 10),
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: const Color(0xFFE2E8F0)),
+                                color: Colors.white,
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
                                     children: [
-                                      Text(
-                                        'Module ${module.moduleNumber}: ${module.title}',
-                                        style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+                                      const Icon(Icons.drag_indicator, color: Colors.grey),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              'Module ${idx + 1}: ${module.title}',
+                                              style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+                                            ),
+                                            if (module.description.isNotEmpty)
+                                              Text(
+                                                module.description,
+                                                style: GoogleFonts.poppins(fontSize: 12, color: const Color(0xFF64748B)),
+                                              ),
+                                          ],
+                                        ),
                                       ),
-                                      if (module.description.isNotEmpty)
-                                        Text(
-                                          module.description,
-                                          style: GoogleFonts.poppins(fontSize: 12, color: const Color(0xFF64748B)),
-                                        ),
-                                      if (module.lessonTitle.isNotEmpty)
-                                        Text(
-                                          'Lesson: ${module.lessonTitle}',
-                                          style: GoogleFonts.poppins(fontSize: 12, color: const Color(0xFF334155)),
-                                        ),
-                                      if (module.duration.isNotEmpty)
-                                        Text(
-                                          module.duration,
-                                          style: GoogleFonts.poppins(fontSize: 12, color: const Color(0xFF6B7280)),
-                                        ),
-                                      Text(
-                                        module.videoDriveLink.isEmpty
-                                            ? 'No Drive link'
-                                            : module.videoDriveLink,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: GoogleFonts.poppins(fontSize: 11, color: const Color(0xFF475569)),
+                                      IconButton(
+                                        onPressed: () => _addOrEditModule(module: module, index: idx),
+                                        icon: const Icon(Icons.edit_outlined, size: 18),
+                                      ),
+                                      IconButton(
+                                        onPressed: () => setState(() => _modules.removeAt(idx)),
+                                        icon: const Icon(Icons.delete_outline, size: 18),
                                       ),
                                     ],
                                   ),
-                                ),
-                                IconButton(
-                                  onPressed: () => _addOrEditModule(module: module, index: idx),
-                                  icon: const Icon(Icons.edit_outlined, size: 18),
-                                ),
-                                IconButton(
-                                  onPressed: () => setState(() => _modules.removeAt(idx)),
-                                  icon: const Icon(Icons.delete_outline, size: 18),
-                                ),
-                              ],
-                            ),
-                          );
-                        }),
+                                  if (module.lessons.isNotEmpty) ...[
+                                    const Divider(),
+                                    ...module.lessons.map((l) => Padding(
+                                      padding: const EdgeInsets.only(left: 32.0, top: 4),
+                                      child: Row(
+                                        children: [
+                                          const Icon(Icons.play_circle_outline, size: 14, color: Colors.blue),
+                                          const SizedBox(width: 8),
+                                          Expanded(
+                                            child: Text(
+                                              '${l.orderIndex}. ${l.title} (${l.duration})',
+                                              style: GoogleFonts.poppins(fontSize: 12),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    )),
+                                  ],
+                                ],
+                              ),
+                            );
+                          },
+                        ),
                     ],
                   ),
                 ),
@@ -1309,16 +1415,54 @@ class _EditCourseBottomSheetState extends State<_EditCourseBottomSheet> {
   }
 }
 
-class _EditableModule {
-  _EditableModule({
+class _EditableLesson {
+  _EditableLesson({
     required this.id,
-    required this.moduleNumber,
     required this.title,
-    required this.description,
-    required this.lessonTitle,
     required this.videoDriveLink,
     required this.transcript,
     required this.duration,
+    required this.orderIndex,
+  });
+
+  factory _EditableLesson.fromCourseLesson(CourseLesson lesson) {
+    return _EditableLesson(
+      id: lesson.id,
+      title: lesson.title,
+      videoDriveLink: lesson.videoDriveLink,
+      transcript: lesson.transcript,
+      duration: lesson.duration,
+      orderIndex: lesson.orderIndex,
+    );
+  }
+
+  final String id;
+  final String title;
+  final String videoDriveLink;
+  final String transcript;
+  final String duration;
+  final int orderIndex;
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'title': title,
+      'video_drive_link': videoDriveLink,
+      'transcript': transcript,
+      'duration': duration,
+      'order_index': orderIndex,
+    };
+  }
+}
+
+class _EditableModule {
+  _EditableModule({
+    required this.id,
+    required this.orderIndex,
+    required this.title,
+    required this.description,
+    this.lessons = const [],
+    this.coinReward = 0,
     this.studyMaterials = const [],
     this.quizQuestions = const [],
   });
@@ -1326,13 +1470,13 @@ class _EditableModule {
   factory _EditableModule.fromCourseModule(CourseModule module) {
     return _EditableModule(
       id: module.id,
-      moduleNumber: module.moduleNumber > 0 ? module.moduleNumber : module.order,
+      orderIndex: module.orderIndex,
       title: module.title,
-      description: module.moduleDescription.isNotEmpty ? module.moduleDescription : module.description,
-      lessonTitle: module.lessonTitle.isNotEmpty ? module.lessonTitle : module.title,
-      videoDriveLink: module.videoDriveLink,
-      transcript: module.transcript,
-      duration: module.duration,
+      description: module.description,
+      lessons: module.lessons
+          .map((l) => _EditableLesson.fromCourseLesson(l))
+          .toList(growable: true),
+      coinReward: module.coinReward,
       studyMaterials: module.studyMaterials
           .map((m) => _StudyMaterialDraft(
                 title: m.title,
@@ -1341,7 +1485,7 @@ class _EditableModule {
                 fileName: m.fileName,
                 fileType: m.fileType,
               ))
-          .toList(growable: false),
+          .toList(growable: true),
       quizQuestions: module.quizQuestions
           .map((q) => _QuizQuestionDraft(
                 question: q.question,
@@ -1351,18 +1495,16 @@ class _EditableModule {
                 optionD: q.optionD,
                 correctAnswer: q.correctAnswer,
               ))
-          .toList(growable: false),
+          .toList(growable: true),
     );
   }
 
   final String id;
-  final int moduleNumber;
+  final int orderIndex;
   final String title;
   final String description;
-  final String lessonTitle;
-  final String videoDriveLink;
-  final String transcript;
-  final String duration;
+  final List<_EditableLesson> lessons;
+  final int coinReward;
   final List<_StudyMaterialDraft> studyMaterials;
   final List<_QuizQuestionDraft> quizQuestions;
 
@@ -1370,13 +1512,11 @@ class _EditableModule {
     return {
       'id': id,
       'courseId': courseId,
-      'moduleNumber': moduleNumber,
+      'order_index': orderIndex,
       'title': title,
       'description': description,
-      'lessonTitle': lessonTitle,
-      'videoDriveLink': videoDriveLink,
-      'transcript': transcript,
-      'duration': duration,
+      'lessons': lessons.map((l) => l.toJson()).toList(growable: false),
+      'coinReward': coinReward,
       'studyMaterials': studyMaterials.map((m) => m.toJson()).toList(growable: false),
       'quizQuestions': quizQuestions.map((q) => q.toJson()).toList(growable: false),
     };
@@ -1463,8 +1603,6 @@ class _StudyMaterialBottomSheetState extends State<_StudyMaterialBottomSheet> {
     final title = TextEditingController();
     final description = TextEditingController();
     final driveLink = TextEditingController();
-    String fileName = '';
-    String fileType = '';
 
     final saved = await showDialog<bool>(
       context: context,
@@ -1481,25 +1619,7 @@ class _StudyMaterialBottomSheetState extends State<_StudyMaterialBottomSheet> {
                 const SizedBox(height: 10),
                 TextField(
                   controller: driveLink,
-                  decoration: const InputDecoration(labelText: 'Drive Link (optional)'),
-                ),
-                const SizedBox(height: 10),
-                OutlinedButton.icon(
-                  onPressed: () async {
-                    final picked = await FilePicker.pickFiles(
-                      type: FileType.custom,
-                      allowedExtensions: const ['pdf', 'ppt', 'pptx', 'png', 'jpg', 'jpeg'],
-                    );
-                    if (picked != null && picked.files.isNotEmpty) {
-                      setLocal(() {
-                        fileName = picked.files.single.name;
-                        final ext = fileName.contains('.') ? fileName.split('.').last : '';
-                        fileType = ext.toLowerCase();
-                      });
-                    }
-                  },
-                  icon: const Icon(Icons.upload_file_outlined),
-                  label: Text(fileName.isEmpty ? 'Select File (PDF/PPT/Image)' : fileName),
+                  decoration: const InputDecoration(labelText: 'Drive Link (required)'),
                 ),
               ],
             ),
@@ -1513,12 +1633,22 @@ class _StudyMaterialBottomSheetState extends State<_StudyMaterialBottomSheet> {
     );
 
     if (saved == true) {
+      final link = driveLink.text.trim();
+      if (link.isEmpty || !_isValidDriveLink(link)) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Please add a valid Google Drive link for study material.')),
+          );
+        }
+        return;
+      }
+
       final next = _StudyMaterialDraft(
         title: title.text.trim(),
         description: description.text.trim(),
-        driveLink: driveLink.text.trim(),
-        fileName: fileName,
-        fileType: fileType,
+        driveLink: link,
+        fileName: '',
+        fileType: '',
       );
       if (next.title.isNotEmpty) {
         setState(() {
@@ -1526,13 +1656,11 @@ class _StudyMaterialBottomSheetState extends State<_StudyMaterialBottomSheet> {
           final module = _modules[moduleIndex];
           _modules[moduleIndex] = _EditableModule(
             id: module.id,
-            moduleNumber: module.moduleNumber,
+            orderIndex: module.orderIndex,
             title: module.title,
             description: module.description,
-            lessonTitle: module.lessonTitle,
-            videoDriveLink: module.videoDriveLink,
-            transcript: module.transcript,
-            duration: module.duration,
+            lessons: module.lessons,
+            coinReward: module.coinReward,
             studyMaterials: materials,
             quizQuestions: module.quizQuestions,
           );
@@ -1611,7 +1739,7 @@ class _StudyMaterialBottomSheetState extends State<_StudyMaterialBottomSheet> {
                                   children: [
                                     Expanded(
                                       child: Text(
-                                        'Module ${module.moduleNumber}: ${module.title}',
+                                        'Module ${module.orderIndex}: ${module.title}',
                                         style: GoogleFonts.poppins(fontWeight: FontWeight.w700),
                                       ),
                                     ),
@@ -1647,13 +1775,11 @@ class _StudyMaterialBottomSheetState extends State<_StudyMaterialBottomSheet> {
                                             final next = List<_StudyMaterialDraft>.from(module.studyMaterials)..removeAt(mIndex);
                                             _modules[index] = _EditableModule(
                                               id: module.id,
-                                              moduleNumber: module.moduleNumber,
+                                              orderIndex: module.orderIndex,
                                               title: module.title,
                                               description: module.description,
-                                              lessonTitle: module.lessonTitle,
-                                              videoDriveLink: module.videoDriveLink,
-                                              transcript: module.transcript,
-                                              duration: module.duration,
+                                              lessons: module.lessons,
+                                              coinReward: module.coinReward,
                                               studyMaterials: next,
                                               quizQuestions: module.quizQuestions,
                                             );
@@ -1706,8 +1832,7 @@ class _QuizEditorBottomSheetState extends State<_QuizEditorBottomSheet> {
   int get _totalQuestions => _modules.fold(0, (sum, m) => sum + m.quizQuestions.length);
 
   int get _minimumRequiredQuestions {
-    if (_modules.isEmpty) return 0;
-    return ((_modules.length + 4) ~/ 5) * 20;
+    return 20;
   }
 
   Future<void> _addQuestion(int moduleIndex) async {
@@ -1775,13 +1900,11 @@ class _QuizEditorBottomSheetState extends State<_QuizEditorBottomSheet> {
           final nextQuestions = List<_QuizQuestionDraft>.from(module.quizQuestions)..add(q);
           _modules[moduleIndex] = _EditableModule(
             id: module.id,
-            moduleNumber: module.moduleNumber,
+            orderIndex: module.orderIndex,
             title: module.title,
             description: module.description,
-            lessonTitle: module.lessonTitle,
-            videoDriveLink: module.videoDriveLink,
-            transcript: module.transcript,
-            duration: module.duration,
+            lessons: module.lessons,
+            coinReward: module.coinReward,
             studyMaterials: module.studyMaterials,
             quizQuestions: nextQuestions,
           );
@@ -1873,7 +1996,7 @@ class _QuizEditorBottomSheetState extends State<_QuizEditorBottomSheet> {
                                   children: [
                                     Expanded(
                                       child: Text(
-                                        'Module ${module.moduleNumber}: ${module.title}',
+                                        'Module ${module.orderIndex}: ${module.title}',
                                         style: GoogleFonts.poppins(fontWeight: FontWeight.w700),
                                       ),
                                     ),
@@ -1910,13 +2033,11 @@ class _QuizEditorBottomSheetState extends State<_QuizEditorBottomSheet> {
                                           final nextQuestions = List<_QuizQuestionDraft>.from(module.quizQuestions)..removeAt(qIndex);
                                           _modules[index] = _EditableModule(
                                             id: module.id,
-                                            moduleNumber: module.moduleNumber,
+                                            orderIndex: module.orderIndex,
                                             title: module.title,
                                             description: module.description,
-                                            lessonTitle: module.lessonTitle,
-                                            videoDriveLink: module.videoDriveLink,
-                                            transcript: module.transcript,
-                                            duration: module.duration,
+                                            lessons: module.lessons,
+                                            coinReward: module.coinReward,
                                             studyMaterials: module.studyMaterials,
                                             quizQuestions: nextQuestions,
                                           );

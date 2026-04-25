@@ -133,6 +133,13 @@ class ChatProvider extends ChangeNotifier {
     'bastard',
     'dick',
     'cunt',
+    'fucker',
+    'shitty',
+    'slut',
+    'whore',
+    'piss',
+    'pussy',
+    'dickhead',
   ];
 
   bool _containsBadWords(String text) {

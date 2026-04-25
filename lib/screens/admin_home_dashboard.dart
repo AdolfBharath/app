@@ -1,5 +1,8 @@
 import 'package:fl_chart/fl_chart.dart';
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
@@ -8,9 +11,12 @@ import '../models/batch.dart';
 import '../models/course.dart';
 import '../models/project.dart';
 import '../models/user.dart';
+import '../models/shop_item.dart';
 import '../providers/auth_provider.dart';
 import '../providers/batch_provider.dart';
 import '../providers/course_provider.dart';
+import '../providers/shop_provider.dart';
+import '../providers/config_provider.dart';
 import '../services/api_service.dart';
 import 'active_courses_screen.dart';
 import 'batch_details_screen.dart';
@@ -34,6 +40,11 @@ class _AdminHomeDashboardState extends State<AdminHomeDashboard> {
   void initState() {
     super.initState();
     _loadProjectCounts();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      context.read<ShopProvider>().fetchShopItems();
+      context.read<ConfigProvider>().loadConfig();
+    });
   }
 
   Future<void> _loadProjectCounts() async {
@@ -62,16 +73,181 @@ class _AdminHomeDashboardState extends State<AdminHomeDashboard> {
     }
   }
 
+  Future<String?> _pickImageAsDataUrl() async {
+    final result = await FilePicker.pickFiles(
+      type: FileType.image,
+      allowMultiple: false,
+      withData: true,
+    );
+    if (result == null || result.files.isEmpty) return null;
+    final file = result.files.first;
+    final bytes = file.bytes;
+    if (bytes == null || bytes.isEmpty) return null;
+    final ext = (file.extension ?? 'png').toLowerCase();
+    final mime = ext == 'jpg' ? 'jpeg' : ext;
+    return 'data:image/$mime;base64,${base64Encode(bytes)}';
+  }
+
+  Future<void> _openShopItemEditor({ShopItem? existing}) async {
+    final nameController = TextEditingController(text: existing?.name ?? '');
+    final priceController = TextEditingController(
+      text: existing == null ? '' : existing.price.toString(),
+    );
+    final imageController = TextEditingController(text: existing?.imageUrl ?? '');
+    final shop = context.read<ShopProvider>();
+    bool saving = false;
+
+    try {
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) {
+          return StatefulBuilder(
+            builder: (dialogContext, setDialogState) {
+              Future<void> save() async {
+                final name = nameController.text.trim();
+                final price = int.tryParse(priceController.text.trim()) ?? -1;
+                final imageUrl = imageController.text.trim();
+
+                if (name.isEmpty || price < 0) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Enter valid name and non-negative price')),
+                  );
+                  return;
+                }
+
+                setDialogState(() => saving = true);
+                final ok = existing == null
+                    ? await shop.createShopItem(name: name, price: price, imageUrl: imageUrl)
+                    : await shop.updateShopItem(
+                        itemId: existing.id,
+                        name: name,
+                        price: price,
+                        imageUrl: imageUrl,
+                      );
+                if (!mounted) return;
+                setDialogState(() => saving = false);
+                if (ok) {
+                  if (Navigator.of(dialogContext).canPop()) {
+                    Navigator.of(dialogContext).pop();
+                  }
+                  await shop.fetchShopItems();
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(shop.errorMessage ?? 'Save failed')),
+                  );
+                }
+              }
+
+              Future<void> pickImage() async {
+                final dataUrl = await _pickImageAsDataUrl();
+                if (dataUrl == null) return;
+                setDialogState(() {
+                  imageController.text = dataUrl;
+                });
+              }
+
+              return AlertDialog(
+                title: Text(existing == null ? 'Add Shop Item' : 'Edit Shop Item'),
+                content: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TextField(
+                        controller: nameController,
+                        decoration: const InputDecoration(labelText: 'Item Name'),
+                      ),
+                      const SizedBox(height: 10),
+                      TextField(
+                        controller: priceController,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(labelText: 'Price (coins)'),
+                      ),
+                      const SizedBox(height: 10),
+                      TextField(
+                        controller: imageController,
+                        decoration: const InputDecoration(labelText: 'Image URL / Data URL'),
+                      ),
+                      const SizedBox(height: 10),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: OutlinedButton.icon(
+                          onPressed: saving ? null : pickImage,
+                          icon: const Icon(Icons.image_outlined),
+                          label: const Text('Select Image'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: saving ? null : () => Navigator.of(dialogContext).pop(),
+                    child: const Text('Cancel'),
+                  ),
+                  FilledButton(
+                    onPressed: saving ? null : save,
+                    child: saving
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('Save'),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+      );
+    } finally {
+      nameController.dispose();
+      priceController.dispose();
+      imageController.dispose();
+    }
+  }
+
+  Future<void> _confirmDeleteShopItem(ShopItem item) async {
+    final shouldDelete = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Item?'),
+        content: Text('Delete "${item.name}" from shop?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (shouldDelete != true || !mounted) return;
+
+    final ok = await context.read<ShopProvider>().deleteShopItem(item.id);
+    if (!mounted) return;
+    if (!ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.read<ShopProvider>().errorMessage ?? 'Delete failed')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
     final courseProvider = context.watch<CourseProvider>();
     final batchProvider = context.watch<BatchProvider>();
+    final shopProvider = context.watch<ShopProvider>();
 
     final students = auth.students;
     final mentors = auth.mentors;
     final courses = courseProvider.courses;
     final batches = batchProvider.batches;
+    final shopItems = shopProvider.items;
 
     final activeStudentsCount = students.length;
     final mentorsCount = mentors.length;
@@ -217,7 +393,8 @@ class _AdminHomeDashboardState extends State<AdminHomeDashboard> {
                     courseCount: totalCourses,
                     studentCount: activeStudentsCount,
                   ),
-
+                  const SizedBox(height: 32),
+                  const _PlatformSettingsCard(),
                   const SizedBox(height: 32),
 
                   // Main Chart
@@ -443,6 +620,33 @@ class _AdminHomeDashboardState extends State<AdminHomeDashboard> {
                   ),
                   const SizedBox(height: 12),
                   _ActiveBatchCard(batch: activeBatch),
+
+                  const SizedBox(height: 24),
+                  _SectionHeader(
+                    title: 'Shop Management',
+                    trailing: FilledButton.icon(
+                      onPressed: () => _openShopItemEditor(),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: const Color(0xFF2563EB),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                      ),
+                      icon: const Icon(Icons.add_rounded, size: 16),
+                      label: Text(
+                        'Add Item',
+                        style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  _AdminShopPreview(
+                    items: shopItems,
+                    isLoading: shopProvider.isLoading,
+                    onRefresh: () => context.read<ShopProvider>().fetchShopItems(),
+                    onEdit: (item) => _openShopItemEditor(existing: item),
+                    onDelete: _confirmDeleteShopItem,
+                  ),
                 ],
               ),
             ),
@@ -464,7 +668,7 @@ class _EnrollmentChartCard extends StatelessWidget {
       return Container(
         height: 220,
         padding: const EdgeInsets.all(24),
-        decoration: LmsAdminTheme.adminCardDecoration,
+        decoration: LmsAdminTheme.adminCardDecoration(context),
         child: Center(
           child: Text(
             'Create batches to view enrollment analytics.',
@@ -493,7 +697,7 @@ class _EnrollmentChartCard extends StatelessWidget {
     return Container(
       height: 220,
       padding: const EdgeInsets.only(right: 16, left: 12, top: 24, bottom: 12),
-      decoration: LmsAdminTheme.adminCardDecoration,
+      decoration: LmsAdminTheme.adminCardDecoration(context),
       child: LineChart(
         LineChartData(
           gridData: FlGridData(
@@ -517,7 +721,7 @@ class _EnrollmentChartCard extends StatelessWidget {
                   if (index < 0 || index >= batches.length)
                     return const SizedBox();
                   return SideTitleWidget(
-                    axisSide: meta.axisSide,
+                    meta: meta,
                     child: Text(
                       'B${index + 1}',
                       style: GoogleFonts.poppins(
@@ -712,7 +916,7 @@ class _StatCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: LmsAdminTheme.adminCardDecoration,
+      decoration: LmsAdminTheme.adminCardDecoration(context),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -787,7 +991,7 @@ class _ActivityFeedCard extends StatelessWidget {
         recentBatches.isEmpty) {
       return Container(
         padding: const EdgeInsets.all(24),
-        decoration: LmsAdminTheme.adminCardDecoration,
+        decoration: LmsAdminTheme.adminCardDecoration(context),
         child: Center(
           child: Text(
             'No recent activity recorded.',
@@ -843,7 +1047,7 @@ class _ActivityFeedCard extends StatelessWidget {
     }
 
     return Container(
-      decoration: LmsAdminTheme.adminCardDecoration,
+      decoration: LmsAdminTheme.adminCardDecoration(context),
       child: Column(children: activities),
     );
   }
@@ -969,7 +1173,7 @@ class _StudentAnalyticsCard extends StatelessWidget {
     if (user == null) {
       return Container(
         padding: const EdgeInsets.all(24),
-        decoration: LmsAdminTheme.adminCardDecoration,
+        decoration: LmsAdminTheme.adminCardDecoration(context),
         child: Center(
           child: Text(
             isStudent
@@ -987,7 +1191,7 @@ class _StudentAnalyticsCard extends StatelessWidget {
 
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: LmsAdminTheme.adminCardDecoration,
+      decoration: LmsAdminTheme.adminCardDecoration(context),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1147,7 +1351,7 @@ class _ActiveLibraryCard extends StatelessWidget {
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-      decoration: LmsAdminTheme.adminCardDecoration,
+      decoration: LmsAdminTheme.adminCardDecoration(context),
       child: Row(
         children: [
           Container(
@@ -1243,7 +1447,7 @@ class _ActiveBatchCard extends StatelessWidget {
     if (batch == null) {
       return Container(
         padding: const EdgeInsets.all(18),
-        decoration: LmsAdminTheme.adminCardDecoration,
+        decoration: LmsAdminTheme.adminCardDecoration(context),
         child: Text(
           'No active batches yet',
           style: GoogleFonts.poppins(
@@ -1261,7 +1465,7 @@ class _ActiveBatchCard extends StatelessWidget {
         : 0.0;
 
     return Container(
-      decoration: LmsAdminTheme.adminCardDecoration,
+      decoration: LmsAdminTheme.adminCardDecoration(context),
       child: Column(
         children: [
           Padding(
@@ -1581,6 +1785,295 @@ class _ProjectReviewCard extends StatelessWidget {
                 ),
               ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AdminShopPreview extends StatelessWidget {
+  const _AdminShopPreview({
+    required this.items,
+    required this.isLoading,
+    required this.onRefresh,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  final List<ShopItem> items;
+  final bool isLoading;
+  final Future<void> Function() onRefresh;
+  final ValueChanged<ShopItem> onEdit;
+  final ValueChanged<ShopItem> onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    if (isLoading && items.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 16),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (items.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(18),
+        decoration: LmsAdminTheme.adminCardDecoration(context),
+        child: Row(
+          children: [
+            const Icon(Icons.storefront_outlined, color: Color(0xFF94A3B8)),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'No shop items yet. Add your first item.',
+                style: GoogleFonts.poppins(
+                  fontSize: 13,
+                  color: const Color(0xFF64748B),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      children: [
+        Align(
+          alignment: Alignment.centerRight,
+          child: TextButton.icon(
+            onPressed: onRefresh,
+            icon: const Icon(Icons.refresh_rounded, size: 16),
+            label: const Text('Refresh'),
+          ),
+        ),
+        ...items.take(6).map(
+              (item) => Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: _AdminShopItemTile(
+                  item: item,
+                  onEdit: () => onEdit(item),
+                  onDelete: () => onDelete(item),
+                ),
+              ),
+            ),
+      ],
+    );
+  }
+}
+
+class _AdminShopItemTile extends StatelessWidget {
+  const _AdminShopItemTile({
+    required this.item,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  final ShopItem item;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: LmsAdminTheme.adminCardDecoration(context),
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        leading: _ShopImageThumb(imageUrl: item.imageUrl),
+        title: Text(
+          item.name,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+        ),
+        subtitle: Text(
+          '${item.price} coins',
+          style: GoogleFonts.poppins(
+            color: const Color(0xFFB7791F),
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              onPressed: onEdit,
+              icon: const Icon(Icons.edit_outlined),
+              tooltip: 'Edit item',
+            ),
+            IconButton(
+              onPressed: onDelete,
+              icon: const Icon(Icons.delete_outline_rounded),
+              tooltip: 'Delete item',
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ShopImageThumb extends StatelessWidget {
+  const _ShopImageThumb({required this.imageUrl});
+
+  final String imageUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasImage = imageUrl.trim().isNotEmpty;
+    final isDataUrl = imageUrl.startsWith('data:image/');
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        width: 48,
+        height: 48,
+        color: const Color(0xFFE2E8F0),
+        child: hasImage
+            ? isDataUrl
+                ? Image.memory(
+                    _decodeDataUrl(imageUrl) ?? Uint8List(0),
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => const Icon(Icons.image_not_supported_outlined),
+                  )
+                : Image.network(
+                    imageUrl,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => const Icon(Icons.image_not_supported_outlined),
+                  )
+            : const Icon(Icons.inventory_2_outlined),
+      ),
+    );
+  }
+}
+
+Uint8List? _decodeDataUrl(String input) {
+  final comma = input.indexOf(',');
+  if (comma < 0 || comma + 1 >= input.length) return null;
+  try {
+    return base64Decode(input.substring(comma + 1));
+  } catch (_) {
+    return null;
+  }
+}
+
+class _PlatformSettingsCard extends StatefulWidget {
+  const _PlatformSettingsCard();
+
+  @override
+  State<_PlatformSettingsCard> createState() => _PlatformSettingsCardState();
+}
+
+class _PlatformSettingsCardState extends State<_PlatformSettingsCard> {
+  final _formUrlController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _formUrlController.text = context.read<ConfigProvider>().registrationFormUrl;
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final url = context.watch<ConfigProvider>().registrationFormUrl;
+    if (_formUrlController.text.isEmpty && url.isNotEmpty) {
+      _formUrlController.text = url;
+    }
+  }
+
+  @override
+  void dispose() {
+    _formUrlController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final url = _formUrlController.text.trim();
+    final ok = await context.read<ConfigProvider>().updateRegistrationFormUrl(url);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(ok ? 'Settings saved successfully' : 'Failed to save settings')),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final config = context.watch<ConfigProvider>();
+    
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: LmsAdminTheme.adminCardDecoration(context),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 4,
+                height: 24,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF3B82F6),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                'Platform Settings',
+                style: GoogleFonts.poppins(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: LmsAdminTheme.textDark,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Registration Form URL (Google Form)',
+            style: GoogleFonts.poppins(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: LmsAdminTheme.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _formUrlController,
+            decoration: InputDecoration(
+              hintText: 'https://forms.gle/xxxxx',
+              hintStyle: GoogleFonts.poppins(fontSize: 13, color: const Color(0xFF9CA3AF)),
+              filled: true,
+              fillColor: const Color(0xFFF8FAFC),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.black.withOpacity(0.04)),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.black.withOpacity(0.04)),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: config.isLoading ? null : _save,
+              icon: config.isLoading 
+                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                : const Icon(Icons.save_rounded, size: 16),
+              label: Text(
+                config.isLoading ? 'Saving...' : 'Save Settings',
+                style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+              ),
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFF3B82F6),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
           ),
         ],
       ),

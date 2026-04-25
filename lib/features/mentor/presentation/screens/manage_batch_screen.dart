@@ -11,6 +11,7 @@ import '../../../../screens/batch_tasks_screen.dart';
 import 'mentor_create_announcement_screen.dart';
 import 'mentor_notifications_screen.dart';
 import '../providers/mentor_provider.dart';
+import '../../../../config/theme.dart';
 
 class ManageBatchScreen extends StatelessWidget {
   const ManageBatchScreen({super.key, required this.username});
@@ -59,7 +60,7 @@ class ManageBatchScreen extends StatelessWidget {
 
     return SafeArea(
       child: Scaffold(
-        backgroundColor: Colors.white,
+        backgroundColor: LmsAdminTheme.backgroundLight,
         body: CustomScrollView(
           slivers: [
             SliverToBoxAdapter(
@@ -69,16 +70,40 @@ class ManageBatchScreen extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          'Batches',
-                          style: GoogleFonts.poppins(
-                            fontSize: 26,
-                            fontWeight: FontWeight.w700,
-                            color: const Color(0xFF0F172A),
+                        Container(
+                          margin: const EdgeInsets.only(top: 4),
+                          width: 4,
+                          height: 30,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF3B82F6),
+                            borderRadius: BorderRadius.circular(999),
                           ),
                         ),
+                        const SizedBox(width: 12),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Batches',
+                              style: GoogleFonts.poppins(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w700,
+                                color: LmsAdminTheme.textDark,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Student batches & performance',
+                              style: GoogleFonts.poppins(
+                                fontSize: 12,
+                                color: const Color(0xFF94A3B8),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const Spacer(),
                         Row(
                           children: [
                             _BatchActionIcon(
@@ -91,7 +116,7 @@ class ManageBatchScreen extends StatelessWidget {
                                 );
                               },
                             ),
-                            const SizedBox(width: 4),
+                            const SizedBox(width: 8),
                             _BatchActionIcon(
                               icon: Icons.notifications_none_rounded,
                               onTap: () {
@@ -102,7 +127,7 @@ class ManageBatchScreen extends StatelessWidget {
                                 );
                               },
                             ),
-                            const SizedBox(width: 4),
+                            const SizedBox(width: 8),
                             _BatchActionIcon(
                               icon: Icons.logout_rounded,
                               onTap: () {
@@ -121,30 +146,8 @@ class ManageBatchScreen extends StatelessWidget {
                     const SizedBox(height: 24),
 
                     Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        border: Border.all(
-                          color: const Color(0xFFDBEAFE),
-                          width: 1,
-                        ),
-                        gradient: LinearGradient(
-                          colors: [
-                            const Color(0xFF3B82F6).withOpacity(0.04),
-                            const Color(0xFF1E40AF).withOpacity(0.02),
-                          ],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                        borderRadius: BorderRadius.circular(18),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.02),
-                            blurRadius: 6,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
+                      padding: const EdgeInsets.all(20),
+                      decoration: LmsAdminTheme.adminCardDecoration(context),
                       child: Row(
                         children: [
                           Container(
@@ -273,19 +276,8 @@ class _BatchCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.02),
-            blurRadius: 4,
-            offset: const Offset(0, 1),
-          ),
-        ],
-      ),
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: LmsAdminTheme.adminCardDecoration(context),
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Column(

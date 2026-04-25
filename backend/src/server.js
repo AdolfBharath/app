@@ -4,6 +4,7 @@ const dotenv = require('dotenv');
 const bcrypt = require('bcryptjs');
 
 dotenv.config();
+const app = express();
 
 const { pool, initDb } = require('./db');
 
@@ -15,15 +16,18 @@ const batchRoutes = require('./routes/batches');
 const mentorRoutes = require('./routes/mentor');
 const projectRoutes = require('./routes/projects');
 const notificationRoutes = require('./routes/notifications');
+const shopRoutes = require('./routes/shop');
 const supportRoutes = require('./routes/support');
 const taskRoutes = require('./routes/tasks');
+const streakRoutes = require('./routes/streak');
 const uploadRoutes = require('./routes/uploads');
 
 // dotenv already loaded above
 
-const app = express();
+const { securityHeaders } = require('./middleware/security');
 
 // ── Global middleware ──────────────────────────────────────────────────────────
+app.use(securityHeaders);
 
 // CORS — mobile apps send no Origin header, so null-origin is always allowed.
 // In production, set ALLOWED_ORIGINS=https://yourdomain.com,https://app.yourdomain.com
@@ -47,6 +51,7 @@ app.use(
 );
 
 app.use(express.json({ limit: '25mb' }));
+app.use(express.urlencoded({ extended: true, limit: '25mb' }));
 
 // ── API routes ─────────────────────────────────────────────────────────────────
 app.use('/api/auth', authRoutes);
@@ -56,11 +61,45 @@ app.use('/api/batches', batchRoutes);
 app.use('/api/mentor', mentorRoutes);
 app.use('/api/projects', projectRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api', shopRoutes);
 app.use('/api/support', supportRoutes);
 app.use('/api', taskRoutes);
+app.use('/api', streakRoutes);
 app.use('/api/uploads', uploadRoutes);
 app.use('/api', uploadRoutes);
 app.use('/api/admin', userRoutes);
+
+// Direct mount for platform config to ensure visibility
+app.get('/api/app-config', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT registration_form_url FROM app_config LIMIT 1');
+    if (result.rowCount === 0) return res.json({ registration_form_url: null });
+    return res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+const { authenticate, requireRole } = require('./middleware/auth');
+app.post('/api/app-config', authenticate, requireRole('admin'), async (req, res) => {
+  const { registration_form_url } = req.body;
+  try {
+    const existing = await pool.query('SELECT id FROM app_config LIMIT 1');
+    if (existing.rowCount > 0) {
+      await pool.query(
+        'UPDATE app_config SET registration_form_url = $1, updated_at = NOW() WHERE id = $2',
+        [registration_form_url, existing.rows[0].id],
+      );
+    } else {
+      await pool.query('INSERT INTO app_config (registration_form_url) VALUES ($1)', [registration_form_url]);
+    }
+    res.json({ message: 'Configuration updated successfully' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
 
 // ── 404 catch-all ─────────────────────────────────────────────────────────────
 app.use((_req, res) => {

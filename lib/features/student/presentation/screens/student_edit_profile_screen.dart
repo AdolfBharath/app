@@ -274,7 +274,7 @@ class _StudentEditProfileScreenState extends State<StudentEditProfileScreen> {
                     style: GoogleFonts.poppins(
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
-                      color: scheme.onSurface.withValues(alpha: 150),
+                      color: scheme.onSurface.withAlpha(150),
                     ),
                   ),
                 ],
@@ -381,7 +381,7 @@ class _Field extends StatelessWidget {
         labelText: label,
         labelStyle: GoogleFonts.poppins(
           fontWeight: FontWeight.w700,
-          color: scheme.onSurface.withValues(alpha: 235),
+          color: scheme.onSurface.withAlpha(235),
         ),
         floatingLabelStyle: GoogleFonts.poppins(
           fontWeight: FontWeight.w700,
@@ -389,21 +389,21 @@ class _Field extends StatelessWidget {
         ),
         hintStyle: GoogleFonts.poppins(
           fontWeight: FontWeight.w500,
-          color: scheme.onSurface.withValues(alpha: 235),
+          color: scheme.onSurface.withAlpha(235),
         ),
         filled: true,
         fillColor: scheme.surfaceContainerHighest,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(color: scheme.onSurface.withValues(alpha: 12)),
+          borderSide: BorderSide(color: scheme.onSurface.withAlpha(12)),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(color: scheme.onSurface.withValues(alpha: 12)),
+          borderSide: BorderSide(color: scheme.onSurface.withAlpha(12)),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(color: scheme.primary.withValues(alpha: 60)),
+          borderSide: BorderSide(color: scheme.primary.withAlpha(60)),
         ),
       ),
     );

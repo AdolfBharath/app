@@ -6,11 +6,30 @@ const { authenticate, requireRole } = require('../middleware/auth');
 const {
   isEmailServiceConfigured,
   sendWelcomeUserEmail,
+  sendWelcomeEmailDynamic,
 } = require('../services/email_service');
 
 const router = express.Router();
 
-// All user routes are protected — only authenticated users may access them.
+/**
+ * GET /api/users/app-config
+ * Fetch global platform configuration.
+ * PUBLIC - used by login screen to show registration link.
+ */
+router.get('/app-config', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT registration_form_url FROM app_config LIMIT 1');
+    if (result.rowCount === 0) {
+      return res.json({ registration_form_url: null });
+    }
+    return res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// All other user routes are protected — only authenticated users may access them.
 router.use(authenticate);
 
 /**
@@ -83,6 +102,11 @@ router.get('/me', async (req, res) => {
         u.admin_no,
         u.phone,
         u.batch_id,
+        u.streak_count,
+        u.last_active_date,
+        u.coins,
+        u.timezone,
+        u.weekly_logins,
         COALESCE(ucm.course_ids, ARRAY[]::uuid[]) AS course_ids
       FROM users u
       LEFT JOIN LATERAL (
@@ -112,7 +136,7 @@ router.get('/me', async (req, res) => {
  * Create a new user. Admin only.
  */
 router.post('/', requireRole('admin'), async (req, res) => {
-  const { name, email, password, role, phone } = req.body;
+  const { name, email, password, role, phone, senderEmail, senderPassword, courseNames } = req.body;
 
   if (!name || !email || !role) {
     return res.status(400).json({ message: 'name, email, and role are required' });
@@ -134,21 +158,50 @@ router.post('/', requireRole('admin'), async (req, res) => {
       [name, normalizedEmail, hash, role, phone],
     );
 
+    const safeCoursNames = Array.isArray(courseNames) ? courseNames.filter(Boolean) : [];
+
     let emailSent = false;
     let emailWarning = null;
     try {
-      await sendWelcomeUserEmail({
-        userName: name,
-        email: normalizedEmail,
-        role,
-        temporaryPassword,
-      });
+      let finalSenderEmail = senderEmail;
+      let finalSenderPassword = senderPassword;
+
+      // If specific credentials aren't provided in the request, try fetching from global config.
+      if (!finalSenderEmail || !finalSenderPassword) {
+        const configRes = await pool.query('SELECT email, app_password FROM email_config LIMIT 1');
+        if (configRes.rowCount > 0) {
+          finalSenderEmail = configRes.rows[0].email;
+          finalSenderPassword = configRes.rows[0].app_password;
+        }
+      }
+
+      if (finalSenderEmail && finalSenderPassword) {
+        // Use either provided or stored dynamic SMTP credentials.
+        await sendWelcomeEmailDynamic({
+          senderEmail: String(finalSenderEmail).trim(),
+          senderPassword: String(finalSenderPassword).trim(),
+          userName: name,
+          email: normalizedEmail,
+          role,
+          temporaryPassword,
+          courseNames: safeCoursNames,
+        });
+      } else {
+        // Fall back to env-configured SMTP if no dynamic config exists.
+        await sendWelcomeUserEmail({
+          userName: name,
+          email: normalizedEmail,
+          role,
+          temporaryPassword,
+          courseNames: safeCoursNames,
+        });
+      }
       emailSent = true;
     } catch (mailErr) {
       console.error('[MAIL] Welcome email failed:', mailErr.message);
       emailWarning = isEmailServiceConfigured()
         ? 'User created, but welcome email could not be sent.'
-        : 'User created, but email service is not configured.';
+        : 'User created, but email service is not configured (set SMTP_* env vars or enter sender credentials in Admin → Email Config).';
     }
 
     return res.status(201).json({
@@ -646,6 +699,87 @@ router.post('/assign-course', requireRole('admin'), async (req, res) => {
     );
 
     return res.status(201).json({ message: 'Course assigned' });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: 'Server error' });
+  }
+});
+
+/**
+ * GET /api/users/email-config
+ * Fetch the current global SMTP configuration. Admin only.
+ */
+router.get('/email-config', requireRole('admin'), async (req, res) => {
+  try {
+    const result = await pool.query('SELECT email, updated_at FROM email_config LIMIT 1');
+    if (result.rowCount === 0) {
+      return res.json({ email: null, updatedAt: null });
+    }
+    return res.json({
+      email: result.rows[0].email,
+      updatedAt: result.rows[0].updated_at,
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: 'Server error' });
+  }
+});
+
+/**
+ * POST /api/users/email-config
+ * Update the global SMTP configuration. Admin only.
+ */
+router.post('/email-config', requireRole('admin'), async (req, res) => {
+  const { email, appPassword } = req.body;
+
+  if (!email || !appPassword) {
+    return res.status(400).json({ message: 'Email and App Password are required' });
+  }
+
+  try {
+    // We only ever store one global config row.
+    const existing = await pool.query('SELECT id FROM email_config LIMIT 1');
+    if (existing.rowCount > 0) {
+      await pool.query(
+        'UPDATE email_config SET email = $1, app_password = $2, updated_at = NOW() WHERE id = $3',
+        [email, appPassword, existing.rows[0].id],
+      );
+    } else {
+      await pool.query(
+        'INSERT INTO email_config (email, app_password) VALUES ($1, $2)',
+        [email, appPassword],
+      );
+    }
+    return res.json({ message: 'Email configuration updated successfully' });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: 'Server error' });
+  }
+});
+
+
+
+/**
+ * POST /api/users/app-config
+ * Update global platform configuration. Admin only.
+ */
+router.post('/app-config', requireRole('admin'), async (req, res) => {
+  const { registration_form_url } = req.body;
+
+  try {
+    const existing = await pool.query('SELECT id FROM app_config LIMIT 1');
+    if (existing.rowCount > 0) {
+      await pool.query(
+        'UPDATE app_config SET registration_form_url = $1, updated_at = NOW() WHERE id = $2',
+        [registration_form_url, existing.rows[0].id],
+      );
+    } else {
+      await pool.query(
+        'INSERT INTO app_config (registration_form_url) VALUES ($1)',
+        [registration_form_url],
+      );
+    }
+    return res.json({ message: 'Configuration updated successfully' });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ message: 'Server error' });

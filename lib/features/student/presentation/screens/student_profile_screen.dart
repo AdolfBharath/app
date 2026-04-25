@@ -17,6 +17,7 @@ import 'student_edit_profile_screen.dart';
 import 'student_notifications_screen.dart';
 import 'student_rewards_screen.dart';
 import 'student_support_screen.dart';
+import 'student_questions_screen.dart';
 
 class StudentProfileScreen extends StatefulWidget {
   const StudentProfileScreen({
@@ -131,7 +132,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                               style: GoogleFonts.inter(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w500,
-                                color: scheme.onSurface.withValues(alpha: 160),
+                                color: scheme.onSurface.withAlpha(160),
                               ),
                             ),
                           ],
@@ -239,7 +240,25 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                       ),
                     ],
                   ),
-
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _QuickTile(
+                          icon: Icons.question_answer_outlined,
+                          label: 'My Questions',
+                          sub: 'Replies & history',
+                          color: const Color(0xFFF43F5E),
+                          onTap: () => Navigator.of(context).push(
+                            MaterialPageRoute(
+                                builder: (_) => const StudentQuestionsScreen()),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      const Spacer(),
+                    ],
+                  ),
                   const SizedBox(height: 22),
 
                   // ── Batch info card ──────────────────────────
@@ -252,7 +271,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                           width: 42,
                           height: 42,
                           decoration: BoxDecoration(
-                            color: scheme.primary.withValues(alpha: 16),
+                            color: scheme.primary.withAlpha(16),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Icon(Icons.group_outlined, color: scheme.primary),
@@ -275,7 +294,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                                 style: GoogleFonts.inter(
                                   fontSize: 12,
                                   fontWeight: FontWeight.w500,
-                                  color: scheme.onSurface.withValues(alpha: 160),
+                                  color: scheme.onSurface.withAlpha(160),
                                 ),
                               ),
                             ],
@@ -286,7 +305,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 8, vertical: 4),
                             decoration: BoxDecoration(
-                              color: const Color(0xFF10B981).withValues(alpha: 16),
+                              color: const Color(0xFF10B981).withAlpha(16),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Text(
@@ -320,7 +339,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                                       width: 40,
                                       height: 40,
                                       decoration: BoxDecoration(
-                                        color: scheme.primary.withValues(alpha: 14),
+                                        color: scheme.primary.withAlpha(14),
                                         borderRadius: BorderRadius.circular(12),
                                       ),
                                       child: Icon(Icons.menu_book_outlined,
@@ -346,7 +365,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                                               fontSize: 11,
                                               fontWeight: FontWeight.w500,
                                               color: scheme.onSurface
-                                                  .withValues(alpha: 140),
+                                                  .withAlpha(140),
                                             ),
                                           ),
                                         ],
@@ -355,7 +374,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                                     Icon(Icons.arrow_forward_ios_rounded,
                                         size: 13,
                                         color:
-                                            scheme.onSurface.withValues(alpha: 120)),
+                                            scheme.onSurface.withAlpha(120)),
                                   ],
                                 ),
                               )),
@@ -400,7 +419,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                                     height: 38,
                                     decoration: BoxDecoration(
                                       color:
-                                          scheme.error.withValues(alpha: 14),
+                                          scheme.error.withAlpha(14),
                                       borderRadius: BorderRadius.circular(12),
                                     ),
                                     child: Icon(Icons.logout_rounded,
@@ -479,10 +498,10 @@ class _QuickTileState extends State<_QuickTile> {
           decoration: BoxDecoration(
             color: scheme.surface,
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: scheme.onSurface.withValues(alpha: 10)),
+            border: Border.all(color: scheme.onSurface.withAlpha(10)),
             boxShadow: [
               BoxShadow(
-                color: theme.shadowColor.withValues(alpha: 7),
+                color: theme.shadowColor.withAlpha(7),
                 blurRadius: 14,
                 offset: const Offset(0, 5),
               ),
@@ -494,9 +513,9 @@ class _QuickTileState extends State<_QuickTile> {
                 width: 42,
                 height: 42,
                 decoration: BoxDecoration(
-                  color: widget.color.withValues(alpha: 20),
+                  color: widget.color.withAlpha(20),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: widget.color.withValues(alpha: 35)),
+                  border: Border.all(color: widget.color.withAlpha(35)),
                 ),
                 child: Padding(
                   padding: const EdgeInsets.all(8),
@@ -519,13 +538,13 @@ class _QuickTileState extends State<_QuickTile> {
                         style: GoogleFonts.inter(
                           fontSize: 10,
                           fontWeight: FontWeight.w500,
-                          color: scheme.onSurface.withValues(alpha: 140),
+                          color: scheme.onSurface.withAlpha(140),
                         )),
                   ],
                 ),
               ),
               Icon(Icons.arrow_forward_ios_rounded,
-                  size: 13, color: scheme.onSurface.withValues(alpha: 140)),
+                  size: 13, color: scheme.onSurface.withAlpha(140)),
             ],
           ),
         ),
@@ -550,10 +569,10 @@ class _InfoCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: scheme.surface,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: scheme.onSurface.withValues(alpha: 8)),
+        border: Border.all(color: scheme.onSurface.withAlpha(8)),
         boxShadow: [
           BoxShadow(
-            color: theme.shadowColor.withValues(alpha: 7),
+            color: theme.shadowColor.withAlpha(7),
             blurRadius: 16,
             offset: const Offset(0, 6),
           ),
@@ -588,7 +607,7 @@ class _AccountField extends StatelessWidget {
                     fontSize: 9,
                     fontWeight: FontWeight.w800,
                     letterSpacing: 0.8,
-                    color: scheme.onSurface.withValues(alpha: 120),
+                    color: scheme.onSurface.withAlpha(120),
                   ),
                 ),
                 const SizedBox(height: 3),
@@ -613,7 +632,7 @@ class _Divider extends StatelessWidget {
   Widget build(BuildContext context) {
     return Divider(
       height: 1,
-      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 8),
+      color: Theme.of(context).colorScheme.onSurface.withAlpha(8),
     );
   }
 }

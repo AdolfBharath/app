@@ -71,6 +71,33 @@ async function initDb() {
     );
     console.log('[DB] ✓ created_at column ready');
 
+    // Streak and reward fields.
+    await pool.query(
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS streak_count INTEGER NOT NULL DEFAULT 0;`,
+    );
+    await pool.query(
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS last_active_date DATE;`,
+    );
+    await pool.query(
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS coins INTEGER NOT NULL DEFAULT 0;`,
+    );
+    await pool.query(
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS streak_freeze_count INTEGER NOT NULL DEFAULT 0;`,
+    );
+    await pool.query(
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS timezone TEXT NOT NULL DEFAULT 'UTC';`,
+    );
+    await pool.query(
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS last_rewarded_date DATE;`,
+    );
+    await pool.query(
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS weekly_logins JSONB NOT NULL DEFAULT '[false, false, false, false, false, false, false]'::jsonb;`,
+    );
+    await pool.query(
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();`,
+    );
+    console.log('[DB] ✓ streak columns ready');
+
     // Optional profile fields for admin UI.
     await pool.query(
       `ALTER TABLE users ADD COLUMN IF NOT EXISTS username TEXT;`,
@@ -179,6 +206,12 @@ async function initDb() {
     await pool.query(
       `ALTER TABLE courses ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'Published';`,
     );
+    await pool.query(
+      `ALTER TABLE courses ADD COLUMN IF NOT EXISTS quiz_coin_reward INTEGER NOT NULL DEFAULT 0;`,
+    );
+    await pool.query(
+      `ALTER TABLE courses ADD COLUMN IF NOT EXISTS quiz_pass_score INTEGER NOT NULL DEFAULT 0;`,
+    );
     console.log('[DB] ✓ courses columns ready');
 
     // If an older courses table exists with a non-UUID id column, migrate it to UUID
@@ -242,6 +275,91 @@ async function initDb() {
       );
     `);
     console.log('[DB] ✓ user_courses table created/verified');
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS student_course_progress (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        student_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        course_id UUID NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+        completed_lessons JSONB NOT NULL DEFAULT '[]'::jsonb,
+        completed_modules JSONB NOT NULL DEFAULT '[]'::jsonb,
+        rewarded_modules JSONB NOT NULL DEFAULT '[]'::jsonb,
+        quiz_completed BOOLEAN NOT NULL DEFAULT FALSE,
+        quiz_reward_given BOOLEAN NOT NULL DEFAULT FALSE,
+        quiz_score INTEGER,
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE (student_id, course_id)
+      );
+    `);
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_student_course_progress_student_course ON student_course_progress (student_id, course_id);`,
+    );
+    console.log('[DB] ✓ student_course_progress table created/verified');
+
+    // Daily activity log for streak calculations.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS daily_activity (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        activity_date DATE NOT NULL,
+        xp_earned INTEGER NOT NULL DEFAULT 0,
+        activity_completed BOOLEAN NOT NULL DEFAULT FALSE,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE (user_id, activity_date)
+      );
+    `);
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_daily_activity_user_date ON daily_activity (user_id, activity_date DESC);`,
+    );
+    console.log('[DB] ✓ daily_activity table created/verified');
+
+    // Generic event stream for login/activity auditing.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS events (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        event_type TEXT NOT NULL,
+        event_timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_events_user_type_time ON events (user_id, event_type, event_timestamp DESC);`,
+    );
+    console.log('[DB] ✓ events table created/verified');
+
+    // Shop items and purchases
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS shop_items (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        name TEXT NOT NULL,
+        price INTEGER NOT NULL DEFAULT 0,
+        image_url TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_shop_items_created ON shop_items (created_at DESC);`,
+    );
+    console.log('[DB] ✓ shop_items table created/verified');
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS shop_purchases (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        shop_item_id UUID NOT NULL REFERENCES shop_items(id) ON DELETE CASCADE,
+        price_paid INTEGER NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_shop_purchases_user_created ON shop_purchases (user_id, created_at DESC);`,
+    );
+    console.log('[DB] ✓ shop_purchases table created/verified');
 
     // Dedicated batch-student mapping table for clean, O(1) batch-scoped queries.
     // Backfilled from user_courses on every boot so it stays consistent.
@@ -464,6 +582,41 @@ async function initDb() {
       `CREATE INDEX IF NOT EXISTS idx_notifications_batch_created ON notifications (batch_id, created_at DESC);`,
     );
     console.log('[DB] ✓ notifications columns ready');
+
+    // Password-reset tokens for the forgot-password flow.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS password_reset_tokens (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        token TEXT UNIQUE NOT NULL,
+        expires_at TIMESTAMPTZ NOT NULL,
+        used BOOLEAN NOT NULL DEFAULT FALSE,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_token ON password_reset_tokens (token);`,
+    );
+    console.log('[DB] ✓ password_reset_tokens table created/verified');
+
+    // Global SMTP configuration for system emails.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS email_config (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        email TEXT NOT NULL,
+        app_password TEXT NOT NULL,
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+    // Global platform configuration.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS app_config (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        registration_form_url TEXT,
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+    console.log('[DB] ✓ app_config table created/verified');
 
     console.log('[DB] ✓ All tables initialized successfully');
   } catch (err) {
