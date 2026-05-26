@@ -9,10 +9,18 @@ class AppConfigService extends ApiServiceBase {
 
   Future<Map<String, dynamic>> getConfig() async {
     try {
-      // Try the root app-config first
-      final response = await http.get(buildUri('/app-config'));
+      final response = await http.get(
+        buildUri('/app_config'),
+        headers: await buildAuthHeaders(),
+      );
       if (response.statusCode == 200) {
-        return jsonDecode(response.body);
+        final decoded = jsonDecode(response.body);
+        if (decoded is List && decoded.isNotEmpty) {
+          return decoded.first as Map<String, dynamic>;
+        }
+        if (decoded is Map<String, dynamic>) {
+          return decoded;
+        }
       }
       return {};
     } catch (e) {
@@ -24,22 +32,47 @@ class AppConfigService extends ApiServiceBase {
   Future<bool> updateConfig(Map<String, dynamic> data) async {
     try {
       final headers = await buildAuthHeaders();
-      // Use snake_case for backend compatibility
       final body = {
-        'registration_form_url': data['registrationFormUrl'] ?? data['registration_form_url'],
+        if (data.containsKey('registrationFormUrl') ||
+            data.containsKey('registration_form_url'))
+          'registration_form_url':
+              data['registrationFormUrl'] ?? data['registration_form_url'],
+        if (data.containsKey('studentReferenceFormUrl') ||
+            data.containsKey('student_reference_form_url'))
+          'student_reference_form_url':
+              data['studentReferenceFormUrl'] ??
+              data['student_reference_form_url'],
+        if (data.containsKey('courseReviewFormUrl') ||
+            data.containsKey('course_review_form_url'))
+          'course_review_form_url':
+              data['courseReviewFormUrl'] ?? data['course_review_form_url'],
       };
 
-      final response = await http.post(
-        buildUri('/app-config'),
-        headers: headers,
-        body: jsonEncode(body),
-      );
+      // Get current config to find ID
+      final currentConfig = await getConfig();
+      http.Response response;
 
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        return true;
+      if (currentConfig.containsKey('id')) {
+        // Patch existing
+        response = await http.patch(
+          buildUri('/app_config?id=eq.${currentConfig['id']}'),
+          headers: headers,
+          body: jsonEncode(body),
+        );
+      } else {
+        // Insert new
+        response = await http.post(
+          buildUri('/app_config'),
+          headers: headers,
+          body: jsonEncode(body),
+        );
       }
 
-      debugPrint('Failed to update config: ${response.statusCode} - ${response.body}');
+      if (isSuccess(response)) return true;
+
+      debugPrint(
+        'Failed to update config: ${response.statusCode} - ${response.body}',
+      );
       return false;
     } catch (e) {
       debugPrint('AppConfigService.updateConfig error: $e');

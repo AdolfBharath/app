@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:my_app/widgets/mentor_inbox_sheet.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../providers/auth_provider.dart';
+import '../../../../screens/batch_tasks_screen.dart';
 import '../../../../screens/login_screen.dart';
 import '../providers/mentor_provider.dart';
 import '../widgets/mentor_bottom_nav.dart';
@@ -11,11 +14,10 @@ import '../widgets/question_card.dart';
 import 'manage_batch_screen.dart';
 import 'manage_course_screen.dart';
 import 'mentor_create_announcement_screen.dart';
-import 'mentor_notifications_screen.dart';
-import 'mentor_notifications_screen.dart';
 import 'mentor_profile_screen.dart';
 import '../../../../models/question.dart';
 import '../../../../config/theme.dart';
+import '../../../../widgets/role_badge.dart';
 
 class MentorHomeScreen extends StatefulWidget {
   const MentorHomeScreen({super.key});
@@ -57,7 +59,7 @@ class _MentorHomeScreenState extends State<MentorHomeScreen> {
     ];
 
     return Scaffold(
-      backgroundColor: LmsAdminTheme.backgroundLight,
+      backgroundColor: const Color(0xFFF4F7FB),
       body: IndexedStack(index: _currentIndex, children: pages),
       bottomNavigationBar: MentorBottomNav(
         currentIndex: _currentIndex,
@@ -164,11 +166,7 @@ class _MentorDashboardState extends State<_MentorDashboard> {
                                 _HeaderActionIcon(
                                   icon: Icons.notifications_none_rounded,
                                   onTap: () {
-                                    Navigator.of(context).push(
-                                      MaterialPageRoute(
-                                        builder: (_) => const MentorNotificationsScreen(),
-                                      ),
-                                    );
+                                    showMentorInboxSheet(context);
                                   },
                                 ),
                                 if (provider.notifications.isNotEmpty)
@@ -213,7 +211,10 @@ class _MentorDashboardState extends State<_MentorDashboard> {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    _ExpertiseCard(username: username, expertise: expertise),
+                    _ExpertiseCard(username: username, expertise: expertise)
+                        .animate()
+                        .fadeIn(duration: 350.ms)
+                        .slideY(begin: .08, end: 0, curve: Curves.easeOutCubic),
                     const SizedBox(height: 28),
                     const SizedBox(height: 32),
                     Row(
@@ -300,8 +301,10 @@ class _MentorDashboardState extends State<_MentorDashboard> {
                     )
                   : SliverList(
                       delegate: SliverChildBuilderDelegate(
-                        (context, index) =>
-                            QuestionCard(question: filteredQuestions[index]),
+                        (context, index) => QuestionCard(question: filteredQuestions[index])
+                            .animate(delay: (40 * index).ms)
+                            .fadeIn(duration: 260.ms)
+                            .slideX(begin: .05, end: 0),
                         childCount: filteredQuestions.length,
                       ),
                     ),
@@ -373,12 +376,70 @@ class _MentorDashboardState extends State<_MentorDashboard> {
             ),
             SliverPadding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              sliver: SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  (context, index) =>
-                      ProjectReviewCard(project: provider.projects[index]),
-                  childCount: provider.projects.length,
-                ),
+              sliver: Builder(
+                builder: (context) {
+                  final filtered = provider.projects.where((p) {
+                    final status = p.status.toLowerCase();
+                    if (_projectFilter == 'Pending') {
+                      return status == 'pending' ||
+                          status == 'submitted' ||
+                          status == 'in_review' ||
+                          status == 'inreview';
+                    }
+                    return status == 'reviewed' || status == 'validated';
+                  }).toList();
+
+                  if (filtered.isEmpty) {
+                    return SliverToBoxAdapter(
+                      child: Container(
+                        padding: const EdgeInsets.all(32),
+                        decoration: LmsAdminTheme.adminCardDecoration(context),
+                        child: Column(
+                          children: [
+                            Icon(Icons.assignment_turned_in_outlined,
+                                size: 48, color: Colors.grey[300]),
+                            const SizedBox(height: 12),
+                            Text(
+                              'No ${_projectFilter.toLowerCase()} submissions',
+                              style: GoogleFonts.poppins(
+                                fontWeight: FontWeight.w600,
+                                color: Colors.grey[500],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }
+
+                  return SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      (context, index) {
+                        final project = filtered[index];
+                        return ProjectReviewCard(
+                          project: project,
+                          onTap: project.isTask && project.batchId != null
+                              ? () {
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) => BatchTasksScreen(
+                                        batchId: project.batchId!,
+                                        batchName: 'Batch Tasks',
+                                        canReview: true,
+                                      ),
+                                    ),
+                                  );
+                                }
+                              : null,
+                        )
+                          .animate(delay: (40 * index).ms)
+                          .fadeIn(duration: 260.ms)
+                          .slideX(begin: .05, end: 0);
+                      },
+                      childCount: filtered.length,
+                    ),
+                  );
+                },
               ),
             ),
             const SliverToBoxAdapter(child: SizedBox(height: 24)),
@@ -398,22 +459,28 @@ class _ExpertiseCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: LmsAdminTheme.adminCardDecoration(context),
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: const Color(0xFF111827),
+        borderRadius: BorderRadius.circular(8),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF111827).withOpacity(0.16),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
       child: Row(
         children: [
           Container(
-            width: 56,
-            height: 56,
+            width: 54,
+            height: 54,
             decoration: BoxDecoration(
-              color: const Color(0xFFEFF6FF),
-              borderRadius: BorderRadius.circular(16),
+              color: const Color(0xFF2563EB),
+              borderRadius: BorderRadius.circular(8),
             ),
-            child: const Icon(
-              Icons.face_retouching_natural_rounded,
-              color: Color(0xFF3B82F6),
-              size: 32,
-            ),
+            child: const Icon(Icons.school_outlined, color: Colors.white, size: 28),
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -425,7 +492,7 @@ class _ExpertiseCard extends StatelessWidget {
                   style: GoogleFonts.poppins(
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
-                    color: LmsAdminTheme.textDark,
+                    color: Colors.white,
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -436,47 +503,21 @@ class _ExpertiseCard extends StatelessWidget {
                   style: GoogleFonts.poppins(
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
-                    color: LmsAdminTheme.textSecondary,
+                    color: const Color(0xFFCBD5E1),
                   ),
                 ),
                 const SizedBox(height: 10),
                 Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: (expertise.isEmpty
-                          ? const <String>['Verified Mentor']
-                          : expertise.take(4).toList())
-                      .map(_TagChip.new)
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: (expertise.isEmpty ? const <String>['Verified Mentor'] : expertise.take(4).toList())
+                      .map((t) => RoleBadge(t))
                       .toList(),
                 ),
               ],
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _TagChip extends StatelessWidget {
-  const _TagChip(this.label);
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-        color: const Color(0xFFDBEAFE),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Text(
-        label,
-        style: GoogleFonts.poppins(
-          fontSize: 9,
-          fontWeight: FontWeight.w600,
-          color: const Color(0xFF1E40AF),
-        ),
       ),
     );
   }

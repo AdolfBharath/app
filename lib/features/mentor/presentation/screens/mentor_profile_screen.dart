@@ -2,276 +2,549 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
-import '../../../../models/user.dart';
 import '../../../../providers/auth_provider.dart';
-import '../../../../screens/login_screen.dart';
-import '../widgets/animated_teacher_widget.dart';
-import '../../../../config/theme.dart';
 
-class MentorProfileScreen extends StatelessWidget {
+class MentorProfileScreen extends StatefulWidget {
   const MentorProfileScreen({super.key, required this.username});
 
   final String username;
 
   @override
-  Widget build(BuildContext context) {
-    final auth = context.watch<AuthProvider>();
-    final user = auth.currentUser;
+  State<MentorProfileScreen> createState() => _MentorProfileScreenState();
+}
 
-    final nameController = TextEditingController(text: user?.name ?? '');
-    final emailController = TextEditingController(text: user?.email ?? '');
-    final usernameController = TextEditingController(
-      text: user?.username ?? username,
+class _MentorProfileScreenState extends State<MentorProfileScreen> {
+  final _profileFormKey = GlobalKey<FormState>();
+  final _passwordFormKey = GlobalKey<FormState>();
+
+  final _nameController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _currentPasswordController = TextEditingController();
+  final _newPasswordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
+
+  bool _isSavingProfile = false;
+  bool _isChangingPassword = false;
+  bool _obscureCurrent = true;
+  bool _obscureNew = true;
+  bool _obscureConfirm = true;
+
+  @override
+  void initState() {
+    super.initState();
+    final auth = Provider.of<AuthProvider>(context, listen: false);
+    _nameController.text = auth.currentUser?.name ?? widget.username;
+    _emailController.text = auth.currentUser?.email ?? '';
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _emailController.dispose();
+    _currentPasswordController.dispose();
+    _newPasswordController.dispose();
+    _confirmPasswordController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _saveProfile() async {
+    if (!_profileFormKey.currentState!.validate()) return;
+
+    setState(() {
+      _isSavingProfile = true;
+    });
+
+    final auth = Provider.of<AuthProvider>(context, listen: false);
+    final name = _nameController.text.trim();
+    final email = _emailController.text.trim();
+
+    final success = await auth.updateCurrentUserProfile(
+      name: name,
+      email: email.isEmpty ? null : email,
     );
-    final passwordController = TextEditingController();
+
+    if (!mounted) return;
+
+    setState(() {
+      _isSavingProfile = false;
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          success ? 'Profile updated successfully' : 'Failed to update profile',
+          style: GoogleFonts.poppins(),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _changePassword() async {
+    if (!_passwordFormKey.currentState!.validate()) return;
+
+    setState(() {
+      _isChangingPassword = true;
+    });
+
+    final current = _currentPasswordController.text.trim();
+    final next = _newPasswordController.text.trim();
+
+    try {
+      final auth = Provider.of<AuthProvider>(context, listen: false);
+      final success = await auth.changePassword(
+        currentPassword: current,
+        newPassword: next,
+      );
+
+      if (!mounted) return;
+
+      if (!success) {
+        throw Exception('Incorrect current password or failed to update');
+      }
+
+      _currentPasswordController.clear();
+      _newPasswordController.clear();
+      _confirmPasswordController.clear();
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Password updated successfully',
+            style: GoogleFonts.poppins(),
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceAll('Exception: ', ''), style: GoogleFonts.poppins())),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isChangingPassword = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final auth = Provider.of<AuthProvider>(context);
+    final user = auth.currentUser;
+    final displayUsername = user?.username ?? widget.username;
 
     return SafeArea(
       child: Scaffold(
-        backgroundColor: LmsAdminTheme.backgroundLight,
+        backgroundColor: const Color(0xFFF4F7FB),
         body: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    margin: const EdgeInsets.only(top: 4),
-                    width: 4,
-                    height: 30,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF3B82F6),
-                      borderRadius: BorderRadius.circular(999),
+              // Header card
+              Container(
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF111827),
+                  borderRadius: BorderRadius.circular(8),
+                  boxShadow: [
+                    BoxShadow(
+                            color: const Color(0xFF111827).withOpacity(0.16),
+                      blurRadius: 20,
+                      offset: const Offset(0, 10),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  ],
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Row(
                     children: [
-                      Text(
-                        'Mentor Profile',
-                        style: GoogleFonts.poppins(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w700,
-                          color: LmsAdminTheme.textDark,
+                      Container(
+                        padding: const EdgeInsets.all(3),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.white.withOpacity(0.18)),
+                        ),
+                        child: Container(
+                          width: 64,
+                          height: 64,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF2563EB),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            ((user?.name ?? 'M').isNotEmpty
+                                    ? (user?.name ?? 'M')[0]
+                                    : 'M')
+                                .toUpperCase(),
+                            style: GoogleFonts.poppins(
+                              fontSize: 36,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
                         ),
                       ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'Account & preferences',
-                        style: GoogleFonts.poppins(
-                          fontSize: 12,
-                          color: const Color(0xFF94A3B8),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              user?.name ?? widget.username,
+                              style: GoogleFonts.poppins(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.10),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                'Verified Mentor',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              user?.email ?? 'mentor@lms.com',
+                              style: GoogleFonts.poppins(
+                                fontSize: 12,
+                                color: Colors.white.withOpacity(0.8),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
                   ),
-                  const Spacer(),
-                  IconButton(
-                    icon: const Icon(Icons.logout_rounded),
-                    onPressed: () {
-                      final auth = context.read<AuthProvider>();
-                      auth.logout();
-                      Navigator.of(context).pushNamedAndRemoveUntil(
-                        LoginScreen.routeName,
-                        (route) => false,
-                      );
-                    },
-                  ),
-                ],
-              ),
-              const SizedBox(height: 32),
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: LmsAdminTheme.adminCardDecoration(context),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 56,
-                      height: 56,
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            const Color(0xFF3B82F6),
-                            const Color(0xFF1E40AF),
-                          ],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: Center(
-                        child: Text(
-                          (user?.name.isNotEmpty ?? false)
-                              ? user!.name[0].toUpperCase()
-                              : 'M',
-                          style: GoogleFonts.poppins(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          user?.name ?? username,
-                          style: GoogleFonts.poppins(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                            color: const Color(0xFF0F172A),
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Senior Mentor',
-                          style: GoogleFonts.poppins(
-                            fontSize: 12,
-                            color: const Color(0xFF94A3B8),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const Spacer(),
-                    const AnimatedTeacherWidget(),
-                  ],
                 ),
               ),
               const SizedBox(height: 24),
-              Text(
-                'Personal Details',
-                style: GoogleFonts.poppins(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  color: const Color(0xFF0F172A),
-                ),
-              ),
-              const SizedBox(height: 12),
-              _LabeledField(
-                label: 'FULL NAME',
-                child: TextField(
-                  controller: nameController,
-                  decoration: _inputDecoration('Full name'),
-                ),
-              ),
-              const SizedBox(height: 12),
-              _LabeledField(
-                label: 'EMAIL ADDRESS',
-                child: TextField(
-                  controller: emailController,
-                  decoration: _inputDecoration('Email'),
-                ),
-              ),
-              const SizedBox(height: 12),
-              _LabeledField(
-                label: 'USERNAME',
-                child: TextField(
-                  controller: usernameController,
-                  decoration: _inputDecoration('Username'),
-                ),
-              ),
-              const SizedBox(height: 12),
-              _LabeledField(
-                label: 'PASSWORD',
-                child: TextField(
-                  controller: passwordController,
-                  obscureText: true,
-                  decoration: _inputDecoration('••••••••'),
-                ),
-              ),
-              const SizedBox(height: 20),
-              SizedBox(
+
+              _sectionTitle('BASIC INFORMATION'),
+              const SizedBox(height: 10),
+
+              // Basic information form card
+              Container(
                 width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () {
-                    // For now, just show a confirmation; actual API wiring can
-                    // be added later without breaking existing flows.
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          'Profile updated (local only)',
-                          style: GoogleFonts.poppins(),
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: Colors.black.withOpacity(0.04),
+                    width: 1,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.02),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Form(
+                  key: _profileFormKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _ReadOnlyField(
+                        label: 'USERNAME',
+                        value: displayUsername,
+                        tag: 'Read-only',
+                      ),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: _nameController,
+                        decoration: const InputDecoration(
+                          labelText: 'FULL NAME',
+                        ),
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty)
+                            return 'Name is required';
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: _emailController,
+                        keyboardType: TextInputType.emailAddress,
+                        decoration: const InputDecoration(
+                          labelText: 'EMAIL ADDRESS',
+                        ),
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty)
+                            return 'Email is required';
+                          if (!value.contains('@'))
+                            return 'Please enter a valid email';
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 20),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: _isSavingProfile ? null : _saveProfile,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF2563EB),
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(18),
+                            ),
+                          ),
+                          child: _isSavingProfile
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : Text(
+                                  'Update Profile',
+                                  style: GoogleFonts.poppins(
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.white,
+                                  ),
+                                ),
                         ),
                       ),
-                    );
-                  },
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(24),
-                    ),
-                    backgroundColor: const Color(0xFF2563EB),
-                    foregroundColor: Colors.white,
-                  ),
-                  child: Text(
-                    'Update Profile',
-                    style: GoogleFonts.poppins(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                    ),
+                    ],
                   ),
                 ),
               ),
+              const SizedBox(height: 32),
+
+              _sectionTitle('SECURITY SETTINGS'),
+              const SizedBox(height: 10),
+
+              // Security / password form card
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: Colors.black.withOpacity(0.04),
+                    width: 1,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.02),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Form(
+                  key: _passwordFormKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      TextFormField(
+                        controller: _currentPasswordController,
+                        obscureText: _obscureCurrent,
+                        decoration: InputDecoration(
+                          labelText: 'CURRENT PASSWORD',
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              _obscureCurrent
+                                  ? Icons.visibility_off_outlined
+                                  : Icons.visibility_outlined,
+                            ),
+                            onPressed: () => setState(
+                              () => _obscureCurrent = !_obscureCurrent,
+                            ),
+                          ),
+                        ),
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty)
+                            return 'Please enter your current password';
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: _newPasswordController,
+                        obscureText: _obscureNew,
+                        decoration: InputDecoration(
+                          labelText: 'NEW PASSWORD',
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              _obscureNew
+                                  ? Icons.visibility_off_outlined
+                                  : Icons.visibility_outlined,
+                            ),
+                            onPressed: () =>
+                                setState(() => _obscureNew = !_obscureNew),
+                          ),
+                        ),
+                        validator: (value) {
+                          if (value == null || value.trim().length < 6)
+                            return 'New password must be at least 6 characters';
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: _confirmPasswordController,
+                        obscureText: _obscureConfirm,
+                        decoration: InputDecoration(
+                          labelText: 'CONFIRM PASSWORD',
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              _obscureConfirm
+                                  ? Icons.visibility_off_outlined
+                                  : Icons.visibility_outlined,
+                            ),
+                            onPressed: () => setState(
+                              () => _obscureConfirm = !_obscureConfirm,
+                            ),
+                          ),
+                        ),
+                        validator: (value) {
+                          if (value != _newPasswordController.text)
+                            return 'Passwords do not match';
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 20),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: OutlinedButton(
+                          onPressed: _isChangingPassword
+                              ? null
+                              : _changePassword,
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: const Color(0xFF2563EB),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 24,
+                              vertical: 12,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            side: const BorderSide(color: Color(0xFF2563EB)),
+                          ),
+                          child: _isChangingPassword
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : Text(
+                                  'Update Password',
+                                  style: GoogleFonts.poppins(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 18),
             ],
           ),
         ),
       ),
     );
   }
+
+  Widget _sectionTitle(String text) {
+    return Row(
+      children: [
+        Container(
+          width: 4,
+          height: 26,
+          decoration: BoxDecoration(
+            color: const Color(0xFF3B82F6),
+            borderRadius: BorderRadius.circular(999),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Text(
+          text,
+          style: GoogleFonts.poppins(
+            fontSize: 15,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 1.6,
+            color: const Color(0xFF334155),
+          ),
+        ),
+      ],
+    );
+  }
 }
 
-class _LabeledField extends StatelessWidget {
-  const _LabeledField({required this.label, required this.child});
+class _ReadOnlyField extends StatelessWidget {
+  const _ReadOnlyField({required this.label, required this.value, this.tag});
 
   final String label;
-  final Widget child;
+  final String value;
+  final String? tag;
 
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          label,
-          style: GoogleFonts.poppins(
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 1.1,
-            color: const Color(0xFF9CA3AF),
-          ),
+        Row(
+          children: [
+            Text(
+              label,
+              style: GoogleFonts.poppins(
+                fontSize: 11,
+                letterSpacing: 1.1,
+                fontWeight: FontWeight.w600,
+                color: const Color(0xFF858597),
+              ),
+            ),
+            const Spacer(),
+            if (tag != null)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF4F5FB),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  tag!,
+                  style: GoogleFonts.poppins(
+                    fontSize: 10,
+                    color: const Color(0xFFB0B3C6),
+                  ),
+                ),
+              ),
+          ],
         ),
         const SizedBox(height: 6),
-        child,
+        TextFormField(
+          enabled: false,
+          initialValue: value,
+          decoration: const InputDecoration(filled: true),
+        ),
       ],
     );
   }
-}
-
-InputDecoration _inputDecoration(String hint) {
-  return InputDecoration(
-    hintText: hint,
-    hintStyle: GoogleFonts.poppins(
-      fontSize: 13,
-      color: const Color(0xFFC7CCE5),
-    ),
-    filled: true,
-    fillColor: const Color(0xFFFFFFFF),
-    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-    border: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(12),
-      borderSide: const BorderSide(color: Color(0xFFE2E8F0), width: 1),
-    ),
-    enabledBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(12),
-      borderSide: const BorderSide(color: Color(0xFFE2E8F0), width: 1),
-    ),
-    focusedBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(12),
-      borderSide: const BorderSide(color: Color(0xFF3B82F6), width: 1.5),
-    ),
-  );
 }

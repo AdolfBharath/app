@@ -3,6 +3,9 @@
 *.log
 *.pyc
 *.swp
+.env
+.env.*
+!.env.example
 .DS_Store
 .atom/
 .build/
@@ -32,6 +35,8 @@ migrate_working_dir/
 .pub/
 /build/
 /coverage/
+node_modules/
+.tool_home/
 
 # Symbolication related
 app.*.symbols

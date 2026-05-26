@@ -17,7 +17,7 @@ class AuthService extends ApiServiceBase {
     required String newPassword,
   }) async {
     final uri = buildUri('/users/current');
-    final response = await http.put(
+    final response = await http.patch(
       uri,
       headers: await buildAuthHeaders(),
       body: jsonEncode(<String, dynamic>{

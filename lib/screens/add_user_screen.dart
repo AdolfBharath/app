@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:csv/csv.dart';
+import 'package:csv/csv.dart' as csv;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -11,6 +11,7 @@ import '../models/user.dart';
 import '../providers/auth_provider.dart';
 import '../providers/course_provider.dart';
 import '../services/api_service.dart';
+import 'package:my_app/utils/ui_utils.dart';
 
 class AddUserScreen extends StatefulWidget {
   const AddUserScreen({super.key});
@@ -37,6 +38,9 @@ class _AddUserScreenState extends State<AddUserScreen> {
   String _selectedGender = 'Prefer not to say';
   String? _selectedCourse;
   bool _isImporting = false;
+  List<List<dynamic>> rows = const [];
+  final Set<String> seenEmails = <String>{};
+  final Set<String> existingEmails = <String>{};
 
   final List<String> _genderOptions = const [
     'Male',
@@ -202,98 +206,12 @@ class _AddUserScreenState extends State<AddUserScreen> {
               : 'User created successfully';
 
       await Provider.of<AuthProvider>(context, listen: false).loadUsers();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(msg, style: GoogleFonts.poppins()),
-          backgroundColor: emailSent
-              ? const Color(0xFF10B981)
-              : emailWarning != null
-                  ? const Color(0xFFF59E0B)
-                  : null,
-          duration: const Duration(seconds: 4),
-        ),
-      );
-      _formKey.currentState!.reset();
-      setState(() {
-        _selectedGender = 'Prefer not to say';
-        _selectedCourse = null;
-      });
-    } on DuplicateEmailException catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message, style: GoogleFonts.poppins())),
-      );
-    } on ApiException catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message, style: GoogleFonts.poppins())),
-      );
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to create user', style: GoogleFonts.poppins()),
-        ),
-      );
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
-    }
-  }
+      showTopNotification(context, msg);
 
-  Future<void> _importStudentsFromCsv() async {
-    if (_isImporting) return;
-
-    final picker = await FilePicker.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['csv'],
-      withData: true,
-      allowMultiple: false,
-    );
-
-    if (picker == null || picker.files.isEmpty) {
-      return;
-    }
-
-    final file = picker.files.single;
-    final bytes = file.bytes;
-    if (bytes == null || bytes.isEmpty) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Unable to read the selected CSV file',
-            style: GoogleFonts.poppins(),
-          ),
-        ),
-      );
-      return;
-    }
-
-    setState(() {
-      _isImporting = true;
-    });
-
-    try {
-      await _ensureCoursesLoaded();
-      final authProvider = context.read<AuthProvider>();
-      await authProvider.loadUsers();
-
-      final existingEmails = authProvider.allUsers
-          .map((user) => user.email.trim().toLowerCase())
-          .where((email) => email.isNotEmpty)
-          .toSet();
-      final seenEmails = <String>{};
-
-      final rows = Csv(
-        dynamicTyping: false,
-      ).decode(utf8.decode(bytes));
-
-      if (rows.isEmpty) {
-        throw ApiException('CSV file is empty');
+      // If not importing via CSV, stop here.
+      if (!_isImporting) {
+        if (mounted) setState(() => _isLoading = false);
+        return;
       }
 
       final header = rows.first
@@ -395,845 +313,227 @@ class _AddUserScreenState extends State<AddUserScreen> {
       );
     } on ApiException catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.message, style: GoogleFonts.poppins())),
-        );
+        showTopNotification(context, e.message);
       }
+    }
+  }
+
+  Future<void> _pickCsvAndImport() async {
+    try {
+      final result = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['csv'],
+        withData: true,
+      );
+      if (result == null || result.files.isEmpty) return;
+      setState(() {
+        _isImporting = true;
+      });
+
+      final file = result.files.first;
+      if (file.bytes == null) {
+        showTopNotification(context, 'Unable to read CSV file content');
+        setState(() => _isImporting = false);
+        return;
+      }
+
+      final content = utf8.decode(file.bytes!);
+      final parsed = _simpleCsvParse(content);
+
+      setState(() {
+        rows = parsed;
+        seenEmails.clear();
+        existingEmails.clear();
+        _isImporting = false;
+      });
+
+      // preload existing users to prevent duplicates
+      try {
+        await Provider.of<AuthProvider>(context, listen: false).loadUsers();
+        final auth = Provider.of<AuthProvider>(context, listen: false);
+        for (final u in auth.allUsers) {
+          existingEmails.add(u.email.trim().toLowerCase());
+        }
+      } catch (_) {}
+
+      showTopNotification(context, 'CSV loaded — ${rows.length} rows');
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Import failed: $e', style: GoogleFonts.poppins()),
-          ),
-        );
+      showTopNotification(context, 'Failed to load CSV: $e');
+      setState(() => _isImporting = false);
+    }
+  }
+
+  List<List<dynamic>> _simpleCsvParse(String content) {
+    final lines = const LineSplitter().convert(content);
+    final out = <List<dynamic>>[];
+    for (final line in lines) {
+      final fields = <String>[];
+      final buf = StringBuffer();
+      var inQuotes = false;
+      for (var i = 0; i < line.length; i++) {
+        final ch = line[i];
+        if (ch == '"') {
+          if (inQuotes && i + 1 < line.length && line[i + 1] == '"') {
+            buf.write('"');
+            i++;
+          } else {
+            inQuotes = !inQuotes;
+          }
+        } else if (ch == ',' && !inQuotes) {
+          fields.add(buf.toString());
+          buf.clear();
+        } else {
+          buf.write(ch);
+        }
       }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isImporting = false;
-        });
-      }
+      fields.add(buf.toString());
+      out.add(fields.map((s) => s.trim()).toList());
     }
-  }
-
-  void _showImportSummary({
-    required int successCount,
-    required int failedCount,
-    required List<String> errors,
-  }) {
-    showDialog<void>(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: Text(
-            'Import Summary',
-            style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
-          ),
-          content: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 420),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _SummaryTile(
-                    icon: Icons.check_circle_outline,
-                    label: 'Successfully added users',
-                    value: '$successCount',
-                    color: const Color(0xFF10B981),
-                  ),
-                  const SizedBox(height: 10),
-                  _SummaryTile(
-                    icon: Icons.error_outline,
-                    label: 'Failed entries',
-                    value: '$failedCount',
-                    color: const Color(0xFFEF4444),
-                  ),
-                  if (errors.isNotEmpty) ...[
-                    const SizedBox(height: 16),
-                    Text(
-                      'Error report',
-                      style: GoogleFonts.poppins(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: const Color(0xFF111827),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Container(
-                      constraints: const BoxConstraints(maxHeight: 220),
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF9FAFB),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: const Color(0xFFE5E7EB)),
-                      ),
-                      child: ListView.separated(
-                        shrinkWrap: true,
-                        itemCount: errors.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 6),
-                        itemBuilder: (_, errorIndex) => Text(
-                          errors[errorIndex],
-                          style: GoogleFonts.poppins(
-                            fontSize: 11,
-                            color: const Color(0xFF4B5563),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: Text(
-                'Close',
-                style: GoogleFonts.poppins(color: const Color(0xFF2563EB)),
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  String _primaryButtonLabel(UserRole role) {
-    switch (role) {
-      case UserRole.student:
-        return 'Create Student Account';
-      case UserRole.mentor:
-        return 'Create Mentor Account';
-      case UserRole.admin:
-        return 'Create Admin Account';
-    }
-  }
-
-  String _roleToApiRole(UserRole role) {
-    switch (role) {
-      case UserRole.student:
-        return 'student';
-      case UserRole.mentor:
-        return 'mentor';
-      case UserRole.admin:
-        return 'admin';
-    }
+    return out;
   }
 
   @override
   Widget build(BuildContext context) {
-    const backgroundColor = Color(0xFFF5F7FA);
+    final courseProvider = Provider.of<CourseProvider>(context);
+    final courses = courseProvider.courses;
 
-    return Container(
-      color: backgroundColor,
-      child: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _HeaderSection(role: _role),
-                const SizedBox(height: 24),
-                Text(
-                  'Select User Role',
-                  style: GoogleFonts.poppins(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    color: const Color(0xFF111827),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Choose the type of account you want to create.\nEach role has specific permissions and access levels.',
-                  style: GoogleFonts.poppins(
-                    fontSize: 12,
-                    height: 1.4,
-                    color: const Color(0xFF6B7280),
-                  ),
-                ),
-                const SizedBox(height: 20),
-
-                // Role cards
-                _RoleCard(
-                  icon: Icons.school_outlined,
-                  title: 'Student Account',
-                  description: 'Enroll a new learner',
-                  selected: _role == UserRole.student,
-                  onTap: () {
-                    setState(() {
-                      _role = UserRole.student;
-                    });
-                  },
-                ),
-                const SizedBox(height: 12),
-                _RoleCard(
-                  icon: Icons.group_outlined,
-                  title: 'Mentor Account',
-                  description: 'Register a professional guide',
-                  selected: _role == UserRole.mentor,
-                  onTap: () {
-                    setState(() {
-                      _role = UserRole.mentor;
-                    });
-                  },
-                ),
-                const SizedBox(height: 12),
-                _RoleCard(
-                  icon: Icons.admin_panel_settings_outlined,
-                  title: 'Admin Account',
-                  description: 'Grant administrative privileges',
-                  selected: _role == UserRole.admin,
-                  onTap: () {
-                    setState(() {
-                      _role = UserRole.admin;
-                    });
-                  },
-                ),
-
-                const SizedBox(height: 20),
-
-                const _SecureRegistrationCard(),
-
-                const SizedBox(height: 24),
-
-                _buildFormForRole(),
-
-                if (_role == UserRole.student) ...[
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      onPressed: _isImporting ? null : _importStudentsFromCsv,
-                      icon: _isImporting
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.file_upload_outlined, size: 18),
-                      label: Text(
-                        _isImporting ? 'Importing...' : '➕ Import Students',
-                        style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: const Color(0xFF2563EB),
-                        side: const BorderSide(color: Color(0xFFBFDBFE)),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 14,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        backgroundColor: const Color(0xFFF8FBFF),
-                      ),
-                    ),
-                  ),
-                ],
-
-                const SizedBox(height: 20),
-
-                // ── Email Config Card ────────────────────────────────────────
-                _EmailConfigCard(
-                  senderEmailController: _senderEmailController,
-                  senderPasswordController: _senderPasswordController,
-                ),
-
-                const SizedBox(height: 20),
-
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF2563EB),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      elevation: 2,
-                    ),
-                    onPressed: _isLoading ? null : _createUser,
-                    child: _isLoading
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                Colors.white,
-                              ),
-                            ),
-                          )
-                        : Text(
-                            _primaryButtonLabel(_role),
-                            style: GoogleFonts.poppins(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Add New User'),
       ),
-    );
-  }
-
-  Widget _buildFormForRole() {
-    switch (_role) {
-      case UserRole.student:
-        return Column(
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _LabeledTextField(
-              label: 'Full Name',
-              hintText: 'e.g. Alex Johnson',
-              controller: _nameController,
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return 'Please enter full name';
-                }
-                return null;
-              },
-            ),
+            Text('Select User Role', style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w700)),
             const SizedBox(height: 12),
-            _LabeledTextField(
-              label: 'Email Address',
-              hintText: 'alex.j@jenovate.edu',
-              keyboardType: TextInputType.emailAddress,
-              controller: _emailController,
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return 'Please enter email address';
-                }
-                if (!value.contains('@')) {
-                  return 'Please enter a valid email';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 12),
-            _LabeledTextField(
-              label: 'Phone Number',
-              hintText: 'e.g. 9876543210',
-              keyboardType: TextInputType.phone,
-              controller: _phoneController,
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return 'Please enter phone number';
-                }
-                if (value.trim().length < 10) {
-                  return 'Phone number must be at least 10 digits';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 12),
-            _LabeledTextField(
-              label: 'Secret Password',
-              hintText: '••••••••••',
-              controller: _passwordController,
-              obscureText: true,
-              validator: (value) {
-                if (value == null || value.trim().length < 6) {
-                  return 'Password must be at least 6 characters';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 16),
             Row(
               children: [
                 Expanded(
-                  child: _GenderChips(
-                    label: 'Gender',
-                    options: _genderOptions,
-                    selected: _selectedGender,
-                    onChanged: (value) {
-                      setState(() {
-                        _selectedGender = value;
-                      });
-                    },
+                  child: _RoleOption(
+                    title: 'Student Account',
+                    description: 'Enroll a new learner',
+                    icon: Icons.school_outlined,
+                    selected: _role == UserRole.student,
+                    onTap: () => setState(() => _role = UserRole.student),
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: _CourseDropdown(
-                    label: 'Assign Course',
-                    options: context
-                        .watch<CourseProvider>()
-                        .courses
-                        .map((course) => course.title)
-                        .toList(growable: false),
-                    value: _selectedCourse,
-                    onChanged: (value) {
-                      setState(() {
-                        _selectedCourse = value;
-                      });
-                    },
+                  child: _RoleOption(
+                    title: 'Mentor Account',
+                    description: 'Register a professional guide',
+                    icon: Icons.person_outline,
+                    selected: _role == UserRole.mentor,
+                    onTap: () => setState(() => _role = UserRole.mentor),
                   ),
                 ),
               ],
             ),
-          ],
-        );
-      case UserRole.mentor:
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _LabeledTextField(
-              label: 'Full Name',
-              hintText: 'e.g. Alex Johnson',
-              controller: _nameController,
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return 'Please enter full name';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 12),
-            _LabeledTextField(
-              label: 'Email Address',
-              hintText: 'alex.j@jenovate.edu',
-              keyboardType: TextInputType.emailAddress,
-              controller: _emailController,
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return 'Please enter email address';
-                }
-                if (!value.contains('@')) {
-                  return 'Please enter a valid email';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 12),
-            _LabeledTextField(
-              label: 'Phone Number',
-              hintText: 'e.g. 9876543210',
-              keyboardType: TextInputType.phone,
-              controller: _phoneController,
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return 'Please enter phone number';
-                }
-                if (value.trim().length < 10) {
-                  return 'Phone number must be at least 10 digits';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 12),
-            _LabeledTextField(
-              label: 'Secret Password',
-              hintText: '••••••••••',
-              controller: _passwordController,
-              obscureText: true,
-              validator: (value) {
-                if (value == null || value.trim().length < 6) {
-                  return 'Password must be at least 6 characters';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 12),
-            _LabeledTextField(
-              label: 'Specialization',
-              hintText: 'e.g. UI/UX Design',
-              controller: _specializationController,
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return 'Please enter specialization';
-                }
-                return null;
-              },
-            ),
-          ],
-        );
-      case UserRole.admin:
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _LabeledTextField(
-              label: 'Full Name',
-              hintText: 'e.g. Alex Johnson',
-              controller: _nameController,
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return 'Please enter full name';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 12),
-            _LabeledTextField(
-              label: 'Email Address',
-              hintText: 'alex.j@jenovate.edu',
-              keyboardType: TextInputType.emailAddress,
-              controller: _emailController,
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return 'Please enter email address';
-                }
-                if (!value.contains('@')) {
-                  return 'Please enter a valid email';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 12),
-            _LabeledTextField(
-              label: 'Phone Number',
-              hintText: 'e.g. 9876543210',
-              keyboardType: TextInputType.phone,
-              controller: _phoneController,
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return 'Please enter phone number';
-                }
-                if (value.trim().length < 10) {
-                  return 'Phone number must be at least 10 digits';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 12),
-            _LabeledTextField(
-              label: 'Secret Password',
-              hintText: '••••••••••',
-              controller: _passwordController,
-              obscureText: true,
-              validator: (value) {
-                if (value == null || value.trim().length < 6) {
-                  return 'Password must be at least 6 characters';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 12),
-            _LabeledTextField(
-              label: 'Role Level (optional)',
-              hintText: 'e.g. Super Admin',
-              controller: _roleLevelController,
-            ),
-          ],
-        );
-    }
-  }
-}
-
-class _HeaderSection extends StatelessWidget {
-  const _HeaderSection({required this.role});
-
-  final UserRole role;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        IconButton(
-          padding: EdgeInsets.zero,
-          visualDensity: VisualDensity.compact,
-          onPressed: () {
-            Navigator.of(context).maybePop();
-          },
-          icon: const Icon(
-            Icons.arrow_back_ios_new_rounded,
-            size: 18,
-            color: Color(0xFF111827),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Add New User',
-                style: GoogleFonts.poppins(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                  color: const Color(0xFF111827),
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'ADMIN CONTROL PANEL',
-                style: GoogleFonts.poppins(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
-                  letterSpacing: 1.2,
-                  color: const Color(0xFF9CA3AF),
-                ),
-              ),
-            ],
-          ),
-        ),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(999),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.03),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Text(
-            'Step 1 of 2',
-            style: GoogleFonts.poppins(
-              fontSize: 11,
-              fontWeight: FontWeight.w500,
-              color: const Color(0xFF2563EB),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-// ── Email Config Card ──────────────────────────────────────────────────────
-
-class _EmailConfigCard extends StatefulWidget {
-  const _EmailConfigCard({
-    required this.senderEmailController,
-    required this.senderPasswordController,
-  });
-
-  final TextEditingController senderEmailController;
-  final TextEditingController senderPasswordController;
-
-  @override
-  State<_EmailConfigCard> createState() => _EmailConfigCardState();
-}
-
-class _EmailConfigCardState extends State<_EmailConfigCard> {
-  bool _expanded = false;
-  bool _showPassword = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: _expanded ? const Color(0xFF2563EB) : const Color(0xFFE5E7EB),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          InkWell(
-            borderRadius: BorderRadius.circular(16),
-            onTap: () => setState(() => _expanded = !_expanded),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              child: Row(
-                children: [
-                  Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFEFF6FF),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(
-                      Icons.email_outlined,
-                      size: 18,
-                      color: Color(0xFF2563EB),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Email Config (Optional)',
-                          style: GoogleFonts.poppins(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                            color: const Color(0xFF111827),
-                          ),
-                        ),
-                        Text(
-                          _expanded
-                              ? 'Overrides global admin SMTP config'
-                              : 'Leave blank to use global SMTP configuration',
-                          style: GoogleFonts.poppins(
-                            fontSize: 11,
-                            color: const Color(0xFF6B7280),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Icon(
-                    _expanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
-                    color: const Color(0xFF9CA3AF),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          if (_expanded) ...[
-            const Divider(height: 1, color: Colors.transparent),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+            const SizedBox(height: 18),
+            Form(
+              key: _formKey,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Info banner
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).brightness == Brightness.dark 
-                        ? const Color(0xFF78350F).withAlpha(50) 
-                        : const Color(0xFFFFFBEB),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                        color: Theme.of(context).brightness == Brightness.dark 
-                          ? const Color(0xFFD97706).withAlpha(100) 
-                          : const Color(0xFFFDE68A)
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.info_outline, size: 16, color: Color(0xFFD97706)),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'Gmail requires an App Password (not your login password). Generate one at myaccount.google.com → Security → App Passwords.',
-                            style: GoogleFonts.poppins(
-                              fontSize: 11,
-                              color: Theme.of(context).brightness == Brightness.dark 
-                                ? const Color(0xFFFDE68A) 
-                                : const Color(0xFF92400E),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  // Sender email field
-                  TextField(
-                    controller: widget.senderEmailController,
-                    keyboardType: TextInputType.emailAddress,
-                    style: GoogleFonts.poppins(fontSize: 13),
-                    decoration: InputDecoration(
-                      labelText: 'Sender Gmail Address',
-                      hintText: 'jenovate@gmail.com',
-                      labelStyle: GoogleFonts.poppins(fontSize: 12, color: const Color(0xFF6B7280)),
-                      hintStyle: GoogleFonts.poppins(fontSize: 12, color: const Color(0xFFD1D5DB)),
-                      prefixIcon: const Icon(Icons.alternate_email, size: 18, color: Color(0xFF6B7280)),
-                      filled: true,
-                      fillColor: Theme.of(context).brightness == Brightness.dark 
-                        ? const Color(0xFF1E293B) 
-                        : const Color(0xFFF8FAFF),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: Color(0xFF2563EB)),
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                    ),
-                  ),
+                  TextFormField(controller: _nameController, decoration: const InputDecoration(labelText: 'Full Name')),
                   const SizedBox(height: 12),
-                  // App password field
-                  TextField(
-                    controller: widget.senderPasswordController,
-                    obscureText: !_showPassword,
-                    style: GoogleFonts.poppins(fontSize: 13),
-                    decoration: InputDecoration(
-                      labelText: 'Gmail App Password',
-                      hintText: '16-character app password',
-                      labelStyle: GoogleFonts.poppins(fontSize: 12, color: const Color(0xFF6B7280)),
-                      hintStyle: GoogleFonts.poppins(fontSize: 12, color: const Color(0xFFD1D5DB)),
-                      prefixIcon: const Icon(Icons.lock_outline, size: 18, color: Color(0xFF6B7280)),
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          _showPassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-                          size: 18,
-                          color: const Color(0xFF9CA3AF),
+                  TextFormField(controller: _emailController, decoration: const InputDecoration(labelText: 'Email')),
+                  const SizedBox(height: 12),
+                  TextFormField(controller: _passwordController, decoration: const InputDecoration(labelText: 'Password')),
+                  const SizedBox(height: 12),
+                  TextFormField(controller: _phoneController, decoration: const InputDecoration(labelText: 'Phone')),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String?>(
+                    value: _selectedCourse,
+                    items: [
+                      const DropdownMenuItem<String?>(value: null, child: Text('No course')),
+                      ...courses.map((c) => DropdownMenuItem<String?>(value: c.title, child: Text(c.title)))
+                    ],
+                    onChanged: (v) => setState(() => _selectedCourse = v),
+                    decoration: const InputDecoration(labelText: 'Assign Course (optional)'),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      ElevatedButton.icon(onPressed: _isImporting ? null : _pickCsvAndImport, icon: const Icon(Icons.upload_file), label: const Text('Import Students')),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: _isLoading ? null : _createUser,
+                          child: _isLoading ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : const Text('Create Student Account'),
                         ),
-                        onPressed: () => setState(() => _showPassword = !_showPassword),
                       ),
-                      filled: true,
-                      fillColor: const Color(0xFFF8FAFF),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: Color(0xFF2563EB)),
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                    ),
+                    ],
                   ),
                 ],
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  String _roleToApiRole(UserRole role) {
+    switch (role) {
+      case UserRole.admin: return 'admin';
+      case UserRole.mentor: return 'mentor';
+      case UserRole.student: return 'student';
+    }
+  }
+
+  void _showImportSummary({required int successCount, required int failedCount, required List<String> errors}) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Import Summary'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Success: $successCount'),
+                Text('Failed: $failedCount'),
+                const SizedBox(height: 8),
+                if (errors.isNotEmpty) ...[
+                  const Text('Errors:'),
+                  const SizedBox(height: 6),
+                  for (final e in errors) Text('- $e', style: const TextStyle(fontSize: 12)),
+                ],
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Close')),
         ],
       ),
     );
   }
 }
 
-class _RoleCard extends StatelessWidget {
-  const _RoleCard({
-    required this.icon,
+class _RoleOption extends StatelessWidget {
+  final String title;
+  final String description;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _RoleOption({
     required this.title,
     required this.description,
+    required this.icon,
     required this.selected,
     required this.onTap,
   });
 
-  final IconData icon;
-  final String title;
-  final String description;
-  final bool selected;
-  final VoidCallback onTap;
-
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final Color borderColor = selected
-        ? const Color(0xFF2563EB)
-        : (isDark ? Colors.white.withAlpha(30) : const Color(0xFFE5E7EB));
+    final borderColor = selected ? const Color(0xFF2563EB) : (isDark ? Colors.white.withAlpha(20) : const Color(0xFFE5E7EB));
     final Color backgroundColor = selected
         ? (isDark ? const Color(0xFF1E3A8A).withAlpha(80) : const Color(0xFFEFF6FF))
         : (isDark ? const Color(0xFF1E293B) : Colors.white);

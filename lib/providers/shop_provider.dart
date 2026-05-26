@@ -128,12 +128,22 @@ class ShopProvider extends ChangeNotifier {
     }
   }
 
-  Future<int?> purchaseItem(String itemId) async {
+  Future<int?> purchaseItem({
+    required String userId,
+    required String itemId,
+    required int itemPrice,
+    required int currentCoins,
+  }) async {
     _errorMessage = null;
     notifyListeners();
 
     try {
-      final remainingCoins = await ShopService.instance.purchaseItem(itemId);
+      final remainingCoins = await ShopService.instance.purchaseItem(
+        userId: userId,
+        itemId: itemId,
+        itemPrice: itemPrice,
+        currentCoins: currentCoins,
+      );
       return remainingCoins;
     } on ApiException catch (e) {
       _errorMessage = e.message;

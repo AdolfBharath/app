@@ -2,6 +2,8 @@ class TaskSubmission {
   const TaskSubmission({
     required this.id,
     required this.taskId,
+    this.batchId,
+    this.title,
     required this.studentId,
     this.studentName,
     this.studentEmail,
@@ -18,6 +20,8 @@ class TaskSubmission {
 
   final String id;
   final String taskId;
+  final String? batchId;
+  final String? title;
   final String studentId;
   final String? studentName;
   final String? studentEmail;
@@ -36,6 +40,8 @@ class TaskSubmission {
     return TaskSubmission(
       id: (json['id'] ?? '').toString(),
       taskId: (json['task_id'] ?? json['taskId'] ?? '').toString(),
+      batchId: json['batch_id']?.toString() ?? json['batchId']?.toString(),
+      title: json['title']?.toString(),
       studentId: (json['student_id'] ?? json['studentId'] ?? '').toString(),
       studentName: json['student_name']?.toString(),
       studentEmail: json['student_email']?.toString(),

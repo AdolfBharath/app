@@ -25,6 +25,7 @@ class _BatchChatScreenState extends State<BatchChatScreen> {
   final _replyController = TextEditingController();
   final _postFocus = FocusNode();
   final _replyFocus = FocusNode();
+  final _scrollController = ScrollController();
 
   String? _activeReplyPostId;
 
@@ -34,15 +35,26 @@ class _BatchChatScreenState extends State<BatchChatScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<ChatProvider>().loadBatchChat(widget.batchId);
     });
+    _scrollController.addListener(_loadOlderWhenNearTop);
   }
 
   @override
   void dispose() {
+    _scrollController
+      ..removeListener(_loadOlderWhenNearTop)
+      ..dispose();
     _postController.dispose();
     _replyController.dispose();
     _postFocus.dispose();
     _replyFocus.dispose();
     super.dispose();
+  }
+
+  void _loadOlderWhenNearTop() {
+    if (!_scrollController.hasClients || _scrollController.offset > 120) {
+      return;
+    }
+    context.read<ChatProvider>().loadOlderMessages(widget.batchId);
   }
 
   bool _isModerator(UserRole? role) {
@@ -84,6 +96,10 @@ class _BatchChatScreenState extends State<BatchChatScreen> {
       _showError('You are banned from this chat');
       return;
     }
+    if (chat.isRestricted) {
+      _showError('You are restricted from posting in this chat');
+      return;
+    }
     final text = _postController.text;
 
     final err = await chat.createPost(widget.batchId, text);
@@ -100,6 +116,10 @@ class _BatchChatScreenState extends State<BatchChatScreen> {
     final chat = context.read<ChatProvider>();
     if (chat.isBanned) {
       _showError('You are banned from this chat');
+      return;
+    }
+    if (chat.isRestricted) {
+      _showError('You are restricted from posting in this chat');
       return;
     }
     final text = _replyController.text;
@@ -196,6 +216,32 @@ class _BatchChatScreenState extends State<BatchChatScreen> {
                   ],
                 ),
               ),
+            if (!chat.isBanned && chat.isRestricted)
+              Container(
+                margin: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  color: scheme.tertiaryContainer,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: scheme.tertiary.withAlpha(45)),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.lock_rounded, color: scheme.onTertiaryContainer, size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'You are restricted from posting in this chat',
+                        style: GoogleFonts.poppins(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: scheme.onTertiaryContainer,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             if (chat.error != null)
               Container(
                 margin: const EdgeInsets.fromLTRB(16, 10, 16, 0),
@@ -258,6 +304,8 @@ class _BatchChatScreenState extends State<BatchChatScreen> {
                                   Text(
                                     chat.isBanned
                                         ? 'You can only read this thread while banned.'
+                                      : chat.isRestricted
+                                        ? 'You can read this thread but cannot post.'
                                         : 'Ask a question to start the batch discussion.',
                                     textAlign: TextAlign.center,
                                     style: GoogleFonts.poppins(
@@ -271,6 +319,7 @@ class _BatchChatScreenState extends State<BatchChatScreen> {
                             ),
                           )
                     : ListView.builder(
+                        controller: _scrollController,
                         padding: const EdgeInsets.fromLTRB(16, 12, 16, 120),
                         itemCount: chat.posts.length,
                         itemBuilder: (context, index) {
@@ -293,7 +342,7 @@ class _BatchChatScreenState extends State<BatchChatScreen> {
                               replyController: _replyController,
                               replyFocus: _replyFocus,
                                 formatTimeAgo: _timeAgo,
-                              onReplyTap: chat.isBanned
+                                onReplyTap: chat.isBanned || chat.isRestricted
                                   ? null
                                   : () {
                                       setState(() {
@@ -309,7 +358,7 @@ class _BatchChatScreenState extends State<BatchChatScreen> {
                                         _replyFocus.unfocus();
                                       }
                                     },
-                              onSubmitReply: chat.isBanned
+                                onSubmitReply: chat.isBanned || chat.isRestricted
                                   ? null
                                   : () => _submitReply(post.id),
                               onUpvote: () async {
@@ -361,6 +410,28 @@ class _BatchChatScreenState extends State<BatchChatScreen> {
                                       if (err != null) _showError(err);
                                     }
                                   : null,
+                              onRestrictUser: isModerator
+                                  ? () async {
+                                      final err = await context
+                                          .read<ChatProvider>()
+                                          .restrictUser(
+                                            batchId: widget.batchId,
+                                            userId: post.author.id,
+                                          );
+                                      if (err != null) _showError(err);
+                                    }
+                                  : null,
+                              onUnrestrictUser: isModerator
+                                  ? () async {
+                                      final err = await context
+                                          .read<ChatProvider>()
+                                          .unrestrictUser(
+                                            batchId: widget.batchId,
+                                            userId: post.author.id,
+                                          );
+                                      if (err != null) _showError(err);
+                                    }
+                                  : null,
                               onDeleteReply: isModerator
                                   ? (replyId) async {
                                       final ok = await _confirm(
@@ -401,6 +472,28 @@ class _BatchChatScreenState extends State<BatchChatScreen> {
                                       if (err != null) _showError(err);
                                     }
                                   : null,
+                              onRestrictReplyUser: isModerator
+                                  ? (userId) async {
+                                      final err = await context
+                                          .read<ChatProvider>()
+                                          .restrictUser(
+                                            batchId: widget.batchId,
+                                            userId: userId,
+                                          );
+                                      if (err != null) _showError(err);
+                                    }
+                                  : null,
+                              onUnrestrictReplyUser: isModerator
+                                  ? (userId) async {
+                                      final err = await context
+                                          .read<ChatProvider>()
+                                          .unrestrictUser(
+                                            batchId: widget.batchId,
+                                            userId: userId,
+                                          );
+                                      if (err != null) _showError(err);
+                                    }
+                                  : null,
                             ),
                           );
                         },
@@ -410,8 +503,9 @@ class _BatchChatScreenState extends State<BatchChatScreen> {
             _Composer(
               controller: _postController,
               focusNode: _postFocus,
-              enabled: !chat.isBanned,
+              enabled: !chat.isBanned && !chat.isRestricted,
               banned: chat.isBanned,
+              restricted: chat.isRestricted,
               onSubmit: _submitPost,
             ),
           ],
@@ -456,6 +550,7 @@ class _Composer extends StatelessWidget {
     required this.focusNode,
     required this.enabled,
     required this.banned,
+    required this.restricted,
     required this.onSubmit,
   });
 
@@ -463,6 +558,7 @@ class _Composer extends StatelessWidget {
   final FocusNode focusNode;
   final bool enabled;
   final bool banned;
+  final bool restricted;
   final VoidCallback onSubmit;
 
   @override
@@ -495,6 +591,25 @@ class _Composer extends StatelessWidget {
                       style: GoogleFonts.poppins(
                         fontWeight: FontWeight.w700,
                         color: scheme.error,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          if (!banned && restricted)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                children: [
+                  Icon(Icons.lock_rounded, color: scheme.tertiary),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'You are restricted from posting in this chat',
+                      style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.w700,
+                        color: scheme.tertiary,
                       ),
                     ),
                   ),
@@ -577,9 +692,13 @@ class _PostCard extends StatelessWidget {
     required this.onDeletePost,
     required this.onBanUser,
     required this.onUnbanUser,
+    required this.onRestrictUser,
+    required this.onUnrestrictUser,
     required this.onDeleteReply,
     required this.onBanReplyUser,
     required this.onUnbanReplyUser,
+    required this.onRestrictReplyUser,
+    required this.onUnrestrictReplyUser,
   });
 
   final BatchChatPost post;
@@ -600,10 +719,14 @@ class _PostCard extends StatelessWidget {
   final VoidCallback? onDeletePost;
   final VoidCallback? onBanUser;
   final VoidCallback? onUnbanUser;
+  final VoidCallback? onRestrictUser;
+  final VoidCallback? onUnrestrictUser;
 
   final Future<void> Function(String replyId)? onDeleteReply;
   final Future<void> Function(String userId)? onBanReplyUser;
   final Future<void> Function(String userId)? onUnbanReplyUser;
+  final Future<void> Function(String userId)? onRestrictReplyUser;
+  final Future<void> Function(String userId)? onUnrestrictReplyUser;
 
   @override
   Widget build(BuildContext context) {
@@ -722,8 +845,8 @@ class _PostCard extends StatelessWidget {
                               ),
                             ),
                           ),
-                        if (isNew) ...[
-                          const SizedBox(width: 6),
+                        if (isNew) const SizedBox(width: 6),
+                        if (isNew)
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                             decoration: BoxDecoration(
@@ -739,7 +862,6 @@ class _PostCard extends StatelessWidget {
                               ),
                             ),
                           ),
-                        ],
                       ],
                     ),
                     const SizedBox(height: 2),
@@ -760,11 +882,15 @@ class _PostCard extends StatelessWidget {
                     if (value == 'delete' && onDeletePost != null) onDeletePost!();
                     if (value == 'ban' && onBanUser != null) onBanUser!();
                     if (value == 'unban' && onUnbanUser != null) onUnbanUser!();
+                    if (value == 'restrict' && onRestrictUser != null) onRestrictUser!();
+                    if (value == 'unrestrict' && onUnrestrictUser != null) onUnrestrictUser!();
                   },
                   itemBuilder: (context) => [
                     const PopupMenuItem(value: 'delete', child: Text('Delete post')),
                     const PopupMenuItem(value: 'ban', child: Text('Ban user')),
                     const PopupMenuItem(value: 'unban', child: Text('Unban user')),
+                    const PopupMenuItem(value: 'restrict', child: Text('Restrict user')),
+                    const PopupMenuItem(value: 'unrestrict', child: Text('Unrestrict user')),
                   ],
                 ),
             ],
@@ -853,8 +979,8 @@ class _PostCard extends StatelessWidget {
                     ),
                   ),
           ),
-          if (post.replies.isNotEmpty) ...[
-            const SizedBox(height: 12),
+          if (post.replies.isNotEmpty) const SizedBox(height: 12),
+          if (post.replies.isNotEmpty)
             Column(
               children: post.replies.map((r) {
                 final replyRole = r.author.role.toLowerCase();
@@ -863,114 +989,97 @@ class _PostCard extends StatelessWidget {
                     : (replyRole == 'mentor' ? 'MENTOR' : '');
 
                 return Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
+                  padding: const EdgeInsets.only(bottom: 12),
                   child: Container(
-                    margin: const EdgeInsets.only(left: 18),
+                    margin: const EdgeInsets.only(left: 24),
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: scheme.surfaceContainerHighest,
-                      borderRadius: BorderRadius.circular(14),
+                      color: scheme.surfaceContainerHighest.withAlpha(120),
+                      borderRadius: BorderRadius.circular(16),
                       border: Border.all(
-                        color: scheme.onSurface.withAlpha(12),
+                        color: scheme.onSurface.withAlpha(10),
                       ),
                     ),
-                    child: Row(
+                    child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Container(
-                          width: 8,
-                          height: 8,
-                          margin: const EdgeInsets.only(top: 6),
-                          decoration: BoxDecoration(
-                            color: scheme.primary,
-                            shape: BoxShape.circle,
+                        Row(
+                          children: [
+                            CircleAvatar(
+                              radius: 10,
+                              backgroundColor: scheme.primary.withAlpha(20),
+                              child: Icon(Icons.person_rounded, color: scheme.primary, size: 12),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                r.author.username?.trim().isNotEmpty == true
+                                    ? r.author.username!
+                                    : r.author.name,
+                                style: GoogleFonts.poppins(
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ),
+                            if (replyRoleLabel.isNotEmpty)
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: replyRoleLabel == 'ADMIN'
+                                      ? scheme.errorContainer
+                                      : scheme.tertiary.withAlpha(18),
+                                  borderRadius: BorderRadius.circular(999),
+                                ),
+                                child: Text(
+                                  replyRoleLabel,
+                                  style: GoogleFonts.poppins(
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 8,
+                                    color: replyRoleLabel == 'ADMIN'
+                                        ? scheme.onErrorContainer
+                                        : scheme.tertiary,
+                                  ),
+                                ),
+                              ),
+                            if (isModerator)
+                              SizedBox(
+                                height: 24,
+                                width: 24,
+                                child: PopupMenuButton<String>(
+                                  padding: EdgeInsets.zero,
+                                  icon: const Icon(Icons.more_vert, size: 14),
+                                  onSelected: (value) {
+                                    if (value == 'delete' && onDeleteReply != null) {
+                                      onDeleteReply!(r.id);
+                                    }
+                                  },
+                                  itemBuilder: (context) => [
+                                    const PopupMenuItem(
+                                      value: 'delete',
+                                      child: Text('Delete', style: TextStyle(fontSize: 12)),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          r.isDeleted ? '[deleted]' : r.content,
+                          style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.w500,
+                            fontSize: 12,
+                            color: scheme.onSurface,
                           ),
                         ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      r.author.username?.trim().isNotEmpty == true
-                                          ? r.author.username!
-                                          : r.author.name,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: GoogleFonts.poppins(
-                                        fontWeight: FontWeight.w800,
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                  ),
-                                  if (replyRoleLabel.isNotEmpty)
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                        vertical: 3,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: replyRoleLabel == 'ADMIN'
-                                            ? scheme.errorContainer
-                                            : scheme.tertiary.withAlpha(18),
-                                        borderRadius: BorderRadius.circular(999),
-                                      ),
-                                      child: Text(
-                                        replyRoleLabel,
-                                        style: GoogleFonts.poppins(
-                                          fontWeight: FontWeight.w800,
-                                          fontSize: 10,
-                                          color: replyRoleLabel == 'ADMIN'
-                                              ? scheme.onErrorContainer
-                                              : scheme.tertiary,
-                                        ),
-                                      ),
-                                    ),
-                                  if (isModerator)
-                                    PopupMenuButton<String>(
-                                      onSelected: (value) {
-                                        if (value == 'delete' && onDeleteReply != null) {
-                                          onDeleteReply!(r.id);
-                                        }
-                                        if (value == 'ban' && onBanReplyUser != null) {
-                                          onBanReplyUser!(r.author.id);
-                                        }
-                                        if (value == 'unban' && onUnbanReplyUser != null) {
-                                          onUnbanReplyUser!(r.author.id);
-                                        }
-                                      },
-                                      itemBuilder: (context) => [
-                                        const PopupMenuItem(value: 'delete', child: Text('Delete reply')),
-                                        const PopupMenuItem(value: 'ban', child: Text('Ban user')),
-                                        const PopupMenuItem(value: 'unban', child: Text('Unban user')),
-                                      ],
-                                    ),
-                                ],
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                formatTimeAgo(r.createdAt),
-                                style: GoogleFonts.poppins(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w600,
-                                  color: scheme.onSurface.withAlpha(170),
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                r.isDeleted ? '[deleted]' : r.content,
-                                style: GoogleFonts.poppins(
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 12,
-                                  color: r.isDeleted
-                                      ? scheme.onSurface.withAlpha(215)
-                                      : scheme.onSurface,
-                                ),
-                              ),
-                            ],
+                        const SizedBox(height: 4),
+                        Text(
+                          formatTimeAgo(r.createdAt),
+                          style: GoogleFonts.poppins(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w600,
+                            color: scheme.onSurface.withAlpha(140),
                           ),
                         ),
                       ],
@@ -979,7 +1088,6 @@ class _PostCard extends StatelessWidget {
                 );
               }).toList(),
             ),
-          ],
         ],
       ),
     );

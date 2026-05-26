@@ -2,11 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ThemeProvider extends ChangeNotifier {
-  ThemeProvider() {
-    _load();
+  ThemeProvider({
+    bool enablePersistence = false,
+    String? storageKey,
+  })  : _enablePersistence = enablePersistence,
+        _storageKey = storageKey ?? _themeModeKey {
+    if (_enablePersistence) {
+      _load();
+    }
   }
 
   static const _themeModeKey = 'app_theme_mode';
+
+  final bool _enablePersistence;
+  final String _storageKey;
 
   ThemeMode _themeMode = ThemeMode.light;
 
@@ -15,15 +24,17 @@ class ThemeProvider extends ChangeNotifier {
   bool get isDark => _themeMode == ThemeMode.dark;
 
   Future<void> _load() async {
+    if (!_enablePersistence) return;
     final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_themeModeKey);
+    final raw = prefs.getString(_storageKey);
     _themeMode = _decode(raw);
     notifyListeners();
   }
 
   Future<void> _save() async {
+    if (!_enablePersistence) return;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_themeModeKey, _encode(_themeMode));
+    await prefs.setString(_storageKey, _encode(_themeMode));
   }
 
   Future<void> setThemeMode(ThemeMode mode) async {

@@ -20,8 +20,14 @@ class _AddCourseScreenState extends State<AddCourseScreen> {
 
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
+  final _instructorController = TextEditingController();
   final _durationController = TextEditingController();
   final _thumbnailController = TextEditingController();
+  final _googleFormController = TextEditingController();
+  final _ratingController = TextEditingController(text: '4.5');
+  final _priceController = TextEditingController(text: '0');
+  final _quizRewardController = TextEditingController(text: '0');
+  final _quizPassScoreController = TextEditingController(text: '0');
 
   static const List<String> _categoryOptions = <String>[
     'Development',
@@ -33,6 +39,7 @@ class _AddCourseScreenState extends State<AddCourseScreen> {
   ];
 
   String _selectedCategory = 'Development';
+  String _selectedDifficulty = 'Intermediate';
 
   String? _selectedMentorId;
   bool _isLoading = false;
@@ -43,8 +50,14 @@ class _AddCourseScreenState extends State<AddCourseScreen> {
   void dispose() {
     _titleController.dispose();
     _descriptionController.dispose();
+    _instructorController.dispose();
     _durationController.dispose();
     _thumbnailController.dispose();
+    _googleFormController.dispose();
+    _ratingController.dispose();
+    _priceController.dispose();
+    _quizRewardController.dispose();
+    _quizPassScoreController.dispose();
     super.dispose();
   }
 
@@ -71,6 +84,13 @@ class _AddCourseScreenState extends State<AddCourseScreen> {
     final category = _selectedCategory.trim();
     final duration = _durationController.text.trim();
     final thumbnailUrl = _thumbnailController.text.trim();
+    final instructorName = _instructorController.text.trim();
+    final googleFormUrl = _googleFormController.text.trim();
+    final rating = double.tryParse(_ratingController.text.trim()) ?? 4.5;
+    final price = double.tryParse(_priceController.text.trim()) ?? 0.0;
+    final quizReward = int.tryParse(_quizRewardController.text.trim()) ?? 0;
+    final quizPassScore =
+        int.tryParse(_quizPassScoreController.text.trim()) ?? 0;
 
     try {
       final success = await ApiService.instance.createCourse(
@@ -80,6 +100,13 @@ class _AddCourseScreenState extends State<AddCourseScreen> {
         duration: duration,
         thumbnailUrl: thumbnailUrl,
         mentorId: _selectedMentorId,
+        instructorName: instructorName,
+        googleFormUrl: googleFormUrl,
+        difficulty: _selectedDifficulty,
+        rating: rating,
+        price: price,
+        quizCoinReward: quizReward,
+        quizPassScore: quizPassScore,
         isFeatured: _isFeatured,
         isMyCourse: _isMyCourse,
       );
@@ -323,6 +350,20 @@ class _AddCourseScreenState extends State<AddCourseScreen> {
                         ),
                       ),
                       const SizedBox(height: 12),
+                      _LabeledField(
+                        label: 'INSTRUCTOR NAME *',
+                        child: TextFormField(
+                          controller: _instructorController,
+                          decoration: _inputDecoration('Academy Mentor'),
+                          validator: (value) {
+                            if (value == null || value.trim().isEmpty) {
+                              return 'Please enter an instructor name';
+                            }
+                            return null;
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 12),
                       Row(
                         children: [
                           Expanded(
@@ -376,6 +417,103 @@ class _AddCourseScreenState extends State<AddCourseScreen> {
                                       suffixIconConstraints:
                                           const BoxConstraints(minWidth: 0),
                                     ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _LabeledField(
+                              label: 'DIFFICULTY',
+                              child: DropdownButtonFormField<String>(
+                                value: _selectedDifficulty,
+                                decoration: _inputDecoration('Intermediate'),
+                                items: const [
+                                  DropdownMenuItem(
+                                    value: 'Beginner',
+                                    child: Text('Beginner'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 'Intermediate',
+                                    child: Text('Intermediate'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 'Advanced',
+                                    child: Text('Advanced'),
+                                  ),
+                                ],
+                                onChanged: (value) {
+                                  if (value == null) return;
+                                  setState(() => _selectedDifficulty = value);
+                                },
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _LabeledField(
+                              label: 'RATING',
+                              child: TextFormField(
+                                controller: _ratingController,
+                                keyboardType: TextInputType.number,
+                                decoration: _inputDecoration('4.5'),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _LabeledField(
+                              label: 'PRICE',
+                              child: TextFormField(
+                                controller: _priceController,
+                                keyboardType: TextInputType.number,
+                                decoration: _inputDecoration('0'),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _LabeledField(
+                              label: 'QUIZ REWARD',
+                              child: TextFormField(
+                                controller: _quizRewardController,
+                                keyboardType: TextInputType.number,
+                                decoration: _inputDecoration('Coins'),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _LabeledField(
+                              label: 'QUIZ PASS SCORE',
+                              child: TextFormField(
+                                controller: _quizPassScoreController,
+                                keyboardType: TextInputType.number,
+                                decoration: _inputDecoration('e.g. 7'),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _LabeledField(
+                              label: 'GOOGLE FORM URL',
+                              child: TextFormField(
+                                controller: _googleFormController,
+                                keyboardType: TextInputType.url,
+                                decoration: _inputDecoration(
+                                  'https://forms.gle/...',
+                                ),
                               ),
                             ),
                           ),

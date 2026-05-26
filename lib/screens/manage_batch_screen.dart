@@ -15,6 +15,7 @@ import '../services/api_service.dart';
 import 'add_batch_screen.dart';
 import 'batch_details_screen.dart';
 import '../features/student/presentation/screens/batch_chat_screen.dart';
+import 'package:my_app/utils/ui_utils.dart';
 
 class ManageBatchScreen extends StatefulWidget {
   const ManageBatchScreen({super.key});
@@ -251,6 +252,7 @@ class _ManageBatchScreenState extends State<ManageBatchScreen> {
                     final students = authProvider.students;
 
                     return ListView.separated(
+                      padding: const EdgeInsets.only(bottom: 96),
                       itemCount: batches.length,
                       separatorBuilder: (_, _) => const SizedBox(height: 12),
                       itemBuilder: (context, index) {
@@ -262,7 +264,9 @@ class _ManageBatchScreenState extends State<ManageBatchScreen> {
                             .firstWhere((m) => m != null, orElse: () => null);
 
                         final batchStudents = students
-                            .where((s) => s.batchId == batch.id)
+                            .where((s) =>
+                                s.batchId == batch.id ||
+                                s.batchIds.contains(batch.id))
                             .toList();
 
                         return _BatchCard(
@@ -303,7 +307,6 @@ class _ManageBatchScreenState extends State<ManageBatchScreen> {
                                   ),
                                   content: Text(
                                     'Are you sure you want to delete this batch?',
-                                    style: GoogleFonts.poppins(),
                                   ),
                                   actions: [
                                     TextButton(
@@ -327,23 +330,12 @@ class _ManageBatchScreenState extends State<ManageBatchScreen> {
                             final ok = await context.read<BatchProvider>().deleteBatch(batch);
                             if (!context.mounted) return;
                             if (!ok) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(
-                                    context.read<BatchProvider>().errorMessage ?? 'Failed to delete batch',
-                                    style: GoogleFonts.poppins(),
-                                  ),
-                                ),
+                              showTopNotification(
+                                context,
+                                context.read<BatchProvider>().errorMessage ??
+                                    'Failed to delete batch',
                               );
                             } else {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('Batch deleted', style: GoogleFonts.poppins()),
-                                ),
-                              );
-                            }
-
-                            if (context.mounted) {
                               setState(() {
                                 _loadFuture = _loadBatches();
                               });
@@ -360,14 +352,16 @@ class _ManageBatchScreenState extends State<ManageBatchScreen> {
         ),
       ),
       floatingActionButton: FloatingActionButton.extended(
-        heroTag: 'manageBatchesFab',
         onPressed: () async {
-          await Navigator.of(
+          final updated = await Navigator.push(
             context,
-          ).push(MaterialPageRoute(builder: (_) => const AddBatchScreen()));
-          setState(() {
-            _loadFuture = _loadBatches();
-          });
+            MaterialPageRoute(builder: (_) => const AddBatchScreen()),
+          );
+          if (updated == true && mounted) {
+            setState(() {
+              _loadFuture = _loadBatches();
+            });
+          }
         },
         backgroundColor: const Color(0xFF2563EB),
         icon: const Icon(Icons.add, color: Colors.white),
@@ -749,7 +743,6 @@ class _BatchEditDialogState extends State<_BatchEditDialog> {
         SnackBar(
           content: Text(
             'Select a course before adding students.',
-            style: GoogleFonts.poppins(),
           ),
         ),
       );
@@ -771,7 +764,6 @@ class _BatchEditDialogState extends State<_BatchEditDialog> {
         SnackBar(
           content: Text(
             'No additional students available.',
-            style: GoogleFonts.poppins(),
           ),
         ),
       );
@@ -863,15 +855,57 @@ class _BatchEditDialogState extends State<_BatchEditDialog> {
     );
 
     if (!mounted || selected == null || selected.isEmpty) return;
+    try {
+      for (final id in selected) {
+        final student = _allStudents
+            .where((s) => s.id == id)
+            .cast<_StudentAssignmentItem?>()
+            .firstWhere((s) => s != null, orElse: () => null);
+        if (student == null) continue;
+        final nextCourseIds = {
+          ...student.courseIds,
+          selectedCourseId,
+        }.toList(growable: false);
+        await ApiService.instance.updateUser(
+          id,
+          courseIds: nextCourseIds,
+          includeCourseIds: true,
+        );
+        await ApiService.instance.assignUserToBatch(id, widget.batch.id);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to add selected students: $e')),
+      );
+      return;
+    }
+
     setState(() {
       _manuallyRemovedStudentIds.removeAll(selected);
       _manuallyAddedStudentIds.addAll(selected);
+      _allStudents = _allStudents.map((student) {
+        if (!selected.contains(student.id)) return student;
+        return _StudentAssignmentItem(
+          id: student.id,
+          name: student.name,
+          email: student.email,
+          courseIds: {
+            ...student.courseIds,
+            selectedCourseId,
+          }.toList(growable: false),
+          batchIds: {
+            ...student.batchIds,
+            widget.batch.id,
+          }.toList(growable: false),
+        );
+      }).toList(growable: false);
     });
   }
 
   List<_StudentAssignmentItem> _currentBatchStudents() {
     return _allStudents
-        .where((s) => s.batchId == widget.batch.id)
+        .where((s) => s.batchIds.contains(widget.batch.id))
         .toList(growable: false);
   }
 
@@ -881,7 +915,7 @@ class _BatchEditDialogState extends State<_BatchEditDialog> {
     final name = _nameController.text.trim();
     if (name.isEmpty || selectedCourseId == null || selectedCourseId.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Course selection is required', style: GoogleFonts.poppins())),
+        SnackBar(content: Text('Course selection is required')),
       );
       return;
     }
@@ -940,19 +974,11 @@ class _BatchEditDialogState extends State<_BatchEditDialog> {
       }
 
       for (final id in toAssign) {
-        await ApiService.instance.updateUser(
-          id,
-          batchId: widget.batch.id,
-          includeBatchId: true,
-        );
+        await ApiService.instance.assignUserToBatch(id, widget.batch.id);
       }
 
       for (final id in toUnassign) {
-        await ApiService.instance.updateUser(
-          id,
-          batchId: null,
-          includeBatchId: true,
-        );
+        await ApiService.instance.removeUserFromBatch(id, widget.batch.id);
       }
 
       if (!mounted) return;
@@ -960,7 +986,7 @@ class _BatchEditDialogState extends State<_BatchEditDialog> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to save batch: $e', style: GoogleFonts.poppins())),
+        SnackBar(content: Text('Failed to save batch: $e')),
       );
       setState(() => _saving = false);
     }
@@ -1254,14 +1280,14 @@ class _StudentAssignmentItem {
     required this.name,
     required this.email,
     required this.courseIds,
-    required this.batchId,
+    required this.batchIds,
   });
 
   final String id;
   final String name;
   final String email;
   final List<String> courseIds;
-  final String? batchId;
+  final List<String> batchIds;
 
   factory _StudentAssignmentItem.fromJson(Map<String, dynamic> json) {
     final rawCourses = <String>{};
@@ -1295,12 +1321,40 @@ class _StudentAssignmentItem {
       }
     }
 
+    final rawBatchIds = <String>{};
+    void addBatchId(dynamic v) {
+      if (v == null) return;
+      final id = v.toString().trim();
+      if (id.isNotEmpty) rawBatchIds.add(id);
+    }
+
+    addBatchId(json['batch_id']);
+    addBatchId(json['batchId']);
+    final batchIds = json['batch_ids'];
+    if (batchIds is List) {
+      for (final id in batchIds) {
+        addBatchId(id);
+      }
+    }
+    for (final relation in [
+      json['student_batches'],
+    ]) {
+      if (relation is! List) continue;
+      for (final item in relation) {
+        if (item is Map<String, dynamic>) {
+          addBatchId(item['batch_id']);
+        } else {
+          addBatchId(item);
+        }
+      }
+    }
+
     return _StudentAssignmentItem(
       id: (json['id'] ?? '').toString(),
       name: (json['name'] ?? 'Student').toString(),
       email: (json['email'] ?? '').toString(),
       courseIds: rawCourses.toList(growable: false),
-      batchId: json['batch_id']?.toString() ?? json['batchId']?.toString(),
+      batchIds: rawBatchIds.toList(growable: false),
     );
   }
 }

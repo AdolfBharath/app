@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:my_app/widgets/mentor_inbox_sheet.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../features/student/presentation/screens/batch_chat_screen.dart';
 import '../../../../models/batch.dart';
-import '../../../../models/user.dart';
 import '../../../../providers/auth_provider.dart';
 import '../../../../screens/login_screen.dart';
 import '../../../../screens/batch_tasks_screen.dart';
+import '../../../../screens/batch_details_screen.dart';
 import 'mentor_create_announcement_screen.dart';
-import 'mentor_notifications_screen.dart';
 import '../providers/mentor_provider.dart';
 import '../../../../config/theme.dart';
 
@@ -19,16 +20,9 @@ class ManageBatchScreen extends StatelessWidget {
   final String username;
 
   void _showBatchDetails(BuildContext context, Batch batch) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (ctx) => _BatchActionBottomSheet(
-        title: 'Batch Details - ${batch.name}',
-        content: 'Student List and Top Performers go here.',
-      ),
+    Navigator.of(context).pushNamed(
+      BatchDetailsScreen.routeName,
+      arguments: batch.id,
     );
   }
 
@@ -60,7 +54,7 @@ class ManageBatchScreen extends StatelessWidget {
 
     return SafeArea(
       child: Scaffold(
-        backgroundColor: LmsAdminTheme.backgroundLight,
+        backgroundColor: const Color(0xFFF4F7FB),
         body: CustomScrollView(
           slivers: [
             SliverToBoxAdapter(
@@ -120,11 +114,7 @@ class ManageBatchScreen extends StatelessWidget {
                             _BatchActionIcon(
                               icon: Icons.notifications_none_rounded,
                               onTap: () {
-                                Navigator.of(context).push(
-                                  MaterialPageRoute(
-                                    builder: (_) => const MentorNotificationsScreen(),
-                                  ),
-                                );
+                                showMentorInboxSheet(context);
                               },
                             ),
                             const SizedBox(width: 8),
@@ -249,7 +239,10 @@ class ManageBatchScreen extends StatelessWidget {
                       onView: () => _showBatchDetails(context, batch),
                       onAssign: () => _showAssignTask(context, batch),
                       onChat: () => _showChatMonitor(context, batch),
-                    );
+                    )
+                        .animate(delay: (45 * index).ms)
+                        .fadeIn(duration: 280.ms)
+                        .slideY(begin: .08, end: 0, curve: Curves.easeOutCubic);
                   }, childCount: batches.length),
                 ),
               ),
@@ -276,8 +269,19 @@ class _BatchCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      decoration: LmsAdminTheme.adminCardDecoration(context),
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFDCE5EF)),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF0F172A).withOpacity(0.05),
+            blurRadius: 16,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Column(
@@ -290,8 +294,8 @@ class _BatchCard extends StatelessWidget {
                   width: 44,
                   height: 44,
                   decoration: BoxDecoration(
-                    color: const Color(0xFFEFF6FF),
-                    borderRadius: BorderRadius.circular(12),
+                    color: const Color(0xFFE8F1FF),
+                    borderRadius: BorderRadius.circular(8),
                   ),
                   child: const Icon(
                     Icons.people_rounded,
@@ -333,15 +337,16 @@ class _BatchCard extends StatelessWidget {
                     vertical: 4,
                   ),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFEFF6FF),
-                    borderRadius: BorderRadius.circular(6),
+                    color: const Color(0xFFF0FDF4),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFFBBF7D0)),
                   ),
                   child: Text(
                     '${batch.enrolledCount}/${batch.capacity ?? '∞'}',
                     style: GoogleFonts.poppins(
                       fontSize: 11,
                       fontWeight: FontWeight.w700,
-                      color: const Color(0xFF1E40AF),
+                      color: const Color(0xFF166534),
                     ),
                   ),
                 ),
@@ -409,8 +414,8 @@ class _BatchActionButton extends StatelessWidget {
           padding: const EdgeInsets.symmetric(vertical: 8),
           decoration: BoxDecoration(
             color: color.withOpacity(0.08),
-            border: Border.all(color: color.withOpacity(0.2), width: 0.5),
-            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: color.withOpacity(0.22), width: 1),
+            borderRadius: BorderRadius.circular(8),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -450,71 +455,12 @@ class _BatchActionIcon extends StatelessWidget {
           width: 40,
           height: 40,
           decoration: BoxDecoration(
-            color: const Color(0xFFF8FAFC),
-            border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
-            borderRadius: BorderRadius.circular(12),
+            color: Colors.white,
+            border: Border.all(color: const Color(0xFFD8E0EA), width: 1),
+            borderRadius: BorderRadius.circular(8),
           ),
           child: Icon(icon, size: 19, color: const Color(0xFF475569)),
         ),
-      ),
-    );
-  }
-}
-
-class _BatchActionBottomSheet extends StatelessWidget {
-  final String title;
-  final String content;
-
-  const _BatchActionBottomSheet({required this.title, required this.content});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(24, 16, 16, 0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  title,
-                  style: GoogleFonts.poppins(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    color: const Color(0xFF0F172A),
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.close_rounded),
-                  onPressed: () => Navigator.pop(context),
-                  color: const Color(0xFF64748B),
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Text(
-                  content,
-                  style: GoogleFonts.poppins(
-                    fontSize: 14,
-                    color: const Color(0xFF64748B),
-                    height: 1.6,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }

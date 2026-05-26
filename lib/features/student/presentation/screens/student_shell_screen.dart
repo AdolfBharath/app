@@ -5,6 +5,8 @@ import 'package:flutter_animate/flutter_animate.dart';
 
 import '../../../../config/theme.dart';
 import '../../../../providers/auth_provider.dart';
+import '../../../../providers/theme_provider.dart';
+import '../../../../models/user.dart';
 import '../providers/student_provider.dart';
 import '../providers/student_nav_provider.dart';
 import '../widgets/student_bottom_nav.dart';
@@ -78,6 +80,10 @@ class _StudentShellScreenState extends State<StudentShellScreen> {
         );
         if (!mounted) return;
         await studentProvider.fetchNotifications();
+        if (!mounted) return;
+        if (auth.currentUser != null) {
+          await studentProvider.fetchPurchasedItems(auth.currentUser!.id);
+        }
       }();
     });
   }
@@ -103,12 +109,23 @@ class _StudentShellScreenState extends State<StudentShellScreen> {
       StudentProfileScreen(username: username, email: user?.email ?? ''),
     ];
 
-    return ChangeNotifierProvider(
-      create: (_) => StudentNavProvider(),
-      child: Consumer2<StudentProvider, StudentNavProvider>(
-        builder: (context, student, nav, _) {
-          final brightness = Theme.of(context).brightness;
-          final studentTheme = brightness == Brightness.dark
+    final isStudent = auth.currentRole == UserRole.student;
+    final storageKey = 'student_theme_mode_${user?.id ?? 'guest'}';
+
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(
+          key: ValueKey(storageKey),
+          create: (_) => ThemeProvider(
+            enablePersistence: isStudent,
+            storageKey: storageKey,
+          ),
+        ),
+        ChangeNotifierProvider(create: (_) => StudentNavProvider()),
+      ],
+      child: Consumer3<StudentProvider, StudentNavProvider, ThemeProvider>(
+        builder: (context, student, nav, themeProvider, _) {
+          final studentTheme = themeProvider.isDark
               ? LmsStudentTheme.darkTheme
               : LmsStudentTheme.lightTheme;
 

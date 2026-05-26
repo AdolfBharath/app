@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:ui' show FilterQuality;
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
@@ -28,7 +29,13 @@ class StudentHeaderRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final isDark = context.watch<ThemeProvider>().isDark;
+    ThemeProvider? themeProvider;
+    try {
+      themeProvider = context.watch<ThemeProvider>();
+    } catch (_) {
+      themeProvider = null;
+    }
+    final isDark = themeProvider?.isDark ?? Theme.of(context).brightness == Brightness.dark;
 
     final unreadCount = context
         .watch<StudentProvider>()
@@ -46,6 +53,7 @@ class StudentHeaderRow extends StatelessWidget {
               'assets/jenovate_logo.png',
               height: 38,
               fit: BoxFit.contain,
+              filterQuality: FilterQuality.high,
               errorBuilder: (_, __, ___) => Text(
                 'Jenovate',
                 style: GoogleFonts.poppins(
@@ -61,28 +69,26 @@ class StudentHeaderRow extends StatelessWidget {
 
           if (showThemeToggle)
             _HeaderIconBtn(
-              icon: isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
-              onTap: () => context.read<ThemeProvider>().toggle(),
+              icon:
+                  isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
+              onTap: themeProvider == null ? null : () => themeProvider!.toggle(),
               tooltip: isDark ? 'Light mode' : 'Dark mode',
               scheme: scheme,
             ),
 
-          if (showNotifications) ...[
-            const SizedBox(width: 8),
+          if (showNotifications) const SizedBox(width: 8),
+          if (showNotifications)
             _NotificationBtn(
               unreadCount: unreadCount,
               onTap: onNotificationsTap,
               scheme: scheme,
             ),
-          ],
 
-          if (showProfile) ...[
-            const SizedBox(width: 8),
-            _ProfileBtn(onTap: onProfileTap, scheme: scheme),
-          ],
+          if (showProfile) const SizedBox(width: 8),
+          if (showProfile) _ProfileBtn(onTap: onProfileTap, scheme: scheme),
 
-          if (showLogout) ...[
-            const SizedBox(width: 8),
+          if (showLogout) const SizedBox(width: 8),
+          if (showLogout)
             _HeaderIconBtn(
               icon: Icons.logout_rounded,
               onTap: onLogoutTap,
@@ -90,7 +96,6 @@ class StudentHeaderRow extends StatelessWidget {
               scheme: scheme,
               color: Colors.redAccent,
             ),
-          ],
         ],
       ),
     );

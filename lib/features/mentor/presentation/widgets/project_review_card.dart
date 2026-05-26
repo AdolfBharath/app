@@ -5,9 +5,10 @@ import '../providers/mentor_provider.dart';
 import '../../../../config/theme.dart';
 
 class ProjectReviewCard extends StatelessWidget {
-  const ProjectReviewCard({super.key, required this.project});
+  const ProjectReviewCard({super.key, required this.project, this.onTap});
 
   final MentorProject project;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -22,16 +23,31 @@ class ProjectReviewCard extends StatelessWidget {
         statusColor = const Color(0xFFF59E0B);
         statusLabel = 'Pending';
         break;
+      case 'submitted':
+        statusColor = const Color(0xFFF59E0B);
+        statusLabel = 'Submitted';
+        break;
+      case 'validated':
+        statusColor = const Color(0xFF10B981);
+        statusLabel = 'Validated';
+        break;
+      case 'in_review':
+      case 'inreview':
+        statusColor = const Color(0xFF3B82F6);
+        statusLabel = 'In Review';
+        break;
       default:
         statusColor = const Color(0xFF3B82F6);
         statusLabel = project.status;
     }
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: LmsAdminTheme.adminCardDecoration(context),
-      child: Padding(
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
         padding: const EdgeInsets.all(12),
+        margin: const EdgeInsets.only(bottom: 12),
+        decoration: LmsAdminTheme.adminCardDecoration(context),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -73,14 +89,38 @@ class ProjectReviewCard extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 2),
-                      Text(
-                        project.title,
-                        style: GoogleFonts.poppins(
-                          fontSize: 11,
-                          color: const Color(0xFF94A3B8),
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                      Row(
+                        children: [
+                          if (project.isTask)
+                            Container(
+                              margin: const EdgeInsets.only(right: 6),
+                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFEFF6FF),
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(color: const Color(0xFF3B82F6).withOpacity(0.3)),
+                              ),
+                              child: Text(
+                                'TASK',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 8,
+                                  fontWeight: FontWeight.w800,
+                                  color: const Color(0xFF3B82F6),
+                                ),
+                              ),
+                            ),
+                          Expanded(
+                            child: Text(
+                              project.title,
+                              style: GoogleFonts.poppins(
+                                fontSize: 11,
+                                color: const Color(0xFF94A3B8),
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -107,6 +147,14 @@ class ProjectReviewCard extends StatelessWidget {
                     ),
                   ),
                 ),
+                if (onTap != null) ...[
+                  const SizedBox(width: 8),
+                  const Icon(
+                    Icons.open_in_new_rounded,
+                    size: 16,
+                    color: Color(0xFF64748B),
+                  ),
+                ],
               ],
             ),
           ],

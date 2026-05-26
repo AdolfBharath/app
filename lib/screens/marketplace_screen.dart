@@ -1,9 +1,7 @@
-import 'dart:convert';
 import 'dart:math';
 
-import 'package:flutter/foundation.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 
 import '../features/mentor/presentation/screens/mentor_notifications_screen.dart';
@@ -157,16 +155,14 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                       _isLoading,
                     )
                   : _selectedBottomIndex == 1
-                      ? _buildMyCoursesTab(context, auth, myCourses, enrolledCountByCourse)
-                      : _buildProfileTab(context, auth, profileTitle, student.coins),
+                      ? _buildExploreTab(context, visibleCourses, enrolledCountByCourse, enrolledCourseIds)
+                      : _selectedBottomIndex == 2
+                          ? _buildMyCoursesTab(context, auth, myCourses, enrolledCountByCourse)
+                          : _buildProfileTab(context, auth, profileTitle, student.coins),
             ),
             _MarketplaceBottomNav(
               currentIndex: _selectedBottomIndex,
-              onHome: () => setState(() => _selectedBottomIndex = 0),
-              onCourses: () => setState(() => _selectedBottomIndex = 1),
-              onProfile: () {
-                setState(() => _selectedBottomIndex = 2);
-              },
+              onTap: (i) => setState(() => _selectedBottomIndex = i),
             ),
           ],
         ),
@@ -188,142 +184,428 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
   ) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final text = theme.textTheme;
+    final isDark = theme.brightness == Brightness.dark;
+    final bgCard = isDark ? const Color(0xFF1E293B) : Colors.white;
+    final borderClr = isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
+    final subtleText = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+    final boldText = isDark ? Colors.white : const Color(0xFF0F172A);
+
+    final categoryLabels = orbitItems.map((e) => e.label).toList();
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 10, 20, 24),
+      padding: EdgeInsets.zero,
       children: [
-        _MarketplaceHeaderRow(
-          isLoggedIn: auth.isLoggedIn,
-          onLoginTap: () => Navigator.of(context).pushNamed(LoginScreen.routeName),
-          onNotificationsTap: () => _openNotifications(context, auth),
-          onThemeToggle: () => context.read<ThemeProvider>().toggle(),
-        ),
-        const SizedBox(height: 14),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-          decoration: BoxDecoration(
-            color: scheme.surface,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: scheme.onSurface.withAlpha(10)),
+        // ── Jenovate Logo Header ──
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+          child: _MarketplaceHeaderRow(
+            isLoggedIn: auth.isLoggedIn,
+            onLoginTap: () => Navigator.of(context).pushNamed(LoginScreen.routeName),
+            onNotificationsTap: () => _openNotifications(context, auth),
+            onThemeToggle: () => context.read<ThemeProvider>().toggle(),
           ),
-          child: Row(
-            children: [
-              Icon(Icons.search_rounded, color: scheme.onSurface.withAlpha(160)),
-              const SizedBox(width: 10),
-              Expanded(
-                child: TextField(
-                  controller: _searchController,
-                  onChanged: (_) => setState(() {}),
-                  decoration: const InputDecoration(
-                    hintText: 'Search courses, skills...',
-                    border: InputBorder.none,
-                    enabledBorder: InputBorder.none,
-                    focusedBorder: InputBorder.none,
+        ),
+        const SizedBox(height: 10),
+
+        // ── Search bar ──
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+          child: Container(
+            height: 52,
+            decoration: BoxDecoration(
+              color: bgCard,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: borderClr),
+              boxShadow: [
+                if (!isDark)
+                  BoxShadow(color: Colors.black.withAlpha(8), blurRadius: 12, offset: const Offset(0, 4)),
+              ],
+            ),
+            child: Row(
+              children: [
+                const SizedBox(width: 14),
+                Icon(Icons.search_rounded, color: subtleText, size: 22),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: TextField(
+                    controller: _searchController,
+                    onChanged: (_) => setState(() {}),
+                    style: TextStyle(color: boldText, fontSize: 14),
+                    decoration: InputDecoration(
+                      hintText: 'What do you want to learn today?',
+                      hintStyle: TextStyle(color: subtleText, fontSize: 14),
+                      border: InputBorder.none,
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 10),
-              SizedBox(
-                width: 42,
-                height: 42,
-                child: IconButton(
-                  onPressed: _openFilters,
-                  style: IconButton.styleFrom(
-                    backgroundColor: scheme.surface,
-                    foregroundColor: scheme.onSurface,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                    side: BorderSide(color: scheme.onSurface.withAlpha(10)),
+                Container(height: 28, width: 1, color: borderClr),
+                InkWell(
+                  onTap: _openFilters,
+                  borderRadius: const BorderRadius.horizontal(right: Radius.circular(16)),
+                  child: SizedBox(
+                    width: 48, height: 52,
+                    child: Icon(Icons.tune_rounded, color: boldText, size: 20),
                   ),
-                  icon: Icon(
-                    _featuredOnly || _difficultyFilters.isNotEmpty || _trendingOnly
-                        ? Icons.tune_rounded
-                        : Icons.tune_outlined,
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 14),
+
+        // ── Category pills ──
+        SizedBox(
+          height: 38,
+          child: ListView.separated(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            scrollDirection: Axis.horizontal,
+            itemCount: categoryLabels.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 8),
+            itemBuilder: (context, index) {
+              final label = categoryLabels[index];
+              final isActive = index == selectedCategoryIndex;
+              return GestureDetector(
+                onTap: () {
+                  if (index < orbitItems.length) {
+                    setState(() => _selectedCategory = orbitItems[index].label);
+                  }
+                },
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+                  decoration: BoxDecoration(
+                    gradient: isActive
+                        ? const LinearGradient(colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)])
+                        : null,
+                    color: isActive ? null : bgCard,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: isActive ? Colors.transparent : borderClr),
                   ),
-                  tooltip: 'Filters',
+                  child: Center(
+                    child: Text(
+                      label,
+                      style: TextStyle(
+                        color: isActive ? Colors.white : boldText,
+                        fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: 18),
+
+        // ── Featured / HOT swipeable carousel ──
+        if (isLoading && trending.isEmpty)
+          const SizedBox(height: 240, child: Center(child: CircularProgressIndicator()))
+        else if (trending.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: _emptyCard(context, 'No courses found for current filters.'),
+          )
+        else
+          SizedBox(
+            height: 280,
+            child: PageView.builder(
+              controller: PageController(viewportFraction: 0.88),
+              itemCount: trending.length,
+              itemBuilder: (context, index) {
+                final course = trending[index];
+                final enrolled = enrolledCourseIds.contains(course.id);
+                final count = enrolledCountByCourse[course.id] ?? 0;
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  child: _hotCourseCard(context, course, count, enrolled, isDark, boldText, subtleText, bgCard, borderClr),
+                );
+              },
+            ),
+          ),
+        const SizedBox(height: 22),
+
+        // ── All Courses – Swipeable Cards ──
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            children: [
+              Text('✨ All Courses',
+                  style: TextStyle(color: boldText, fontSize: 18, fontWeight: FontWeight.w800, letterSpacing: -0.3)),
+              const Spacer(),
+              GestureDetector(
+                onTap: () => _openCourseListSheet('All Courses', visibleCourses),
+                child: Row(
+                  children: [
+                    Text('See all', style: TextStyle(color: const Color(0xFF6366F1), fontSize: 13, fontWeight: FontWeight.w600)),
+                    const SizedBox(width: 4),
+                    Icon(Icons.arrow_forward_rounded, color: const Color(0xFF6366F1), size: 18),
+                  ],
                 ),
               ),
             ],
           ),
         ),
-        const SizedBox(height: 18),
-        Text(
-          'Discover Learning',
-          style: text.displaySmall?.copyWith(fontWeight: FontWeight.w800, fontStyle: FontStyle.italic),
-        ),
-        Text(
-          'Select a path to start your journey',
-          style: text.bodyMedium,
-        ),
-        const SizedBox(height: 20),
-        Center(
-          child: _CategoryOrbit(
-            items: orbitItems,
-            selectedIndex: selectedCategoryIndex,
-            onSelect: (index) {
-              if (index < 0 || index >= orbitItems.length) return;
-              setState(() => _selectedCategory = orbitItems[index].label);
-            },
-          ),
-        ),
-        const SizedBox(height: 24),
-        Row(
-          children: [
-            Text(
-              'Trending Now',
-              style: text.headlineSmall?.copyWith(fontWeight: FontWeight.w800, fontStyle: FontStyle.italic),
-            ),
-            const Spacer(),
-            TextButton(
-              onPressed: () => _openCourseListSheet('Trending Now', trending),
-              child: Text(
-                'View all',
-                style: TextStyle(fontWeight: FontWeight.w700, color: scheme.primary),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        if (isLoading && topCourse == null)
-          _skeletonFeaturedCard(context)
-        else if (topCourse == null)
-          _emptyCard(context, 'No courses found for current filters.')
-        else
-          _featuredCourseCard(
-            context,
-            topCourse,
-            enrolledCount: enrolledCountByCourse[topCourse.id] ?? 0,
-            enrolled: enrolledCourseIds.contains(topCourse.id),
-          ),
-        const SizedBox(height: 18),
-        Row(
-          children: [
-            Text(
-              'Explore Courses',
-              style: text.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
-            ),
-            const Spacer(),
-            Text(
-              '${visibleCourses.length}',
-              style: text.labelLarge?.copyWith(color: scheme.onSurface.withAlpha(160)),
-            ),
-          ],
-        ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 14),
         if (isLoading && visibleCourses.isEmpty)
-          ...List.generate(3, (_) => _skeletonListTile(context))
+          const SizedBox(height: 200, child: Center(child: CircularProgressIndicator()))
         else if (visibleCourses.isEmpty)
-          _emptyCard(context, 'Try changing search or filter settings.')
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: _emptyCard(context, 'Try changing search or filter settings.'),
+          )
         else
-          ...visibleCourses.take(4).map(
-                (c) => _compactCourseCard(
-                  context,
-                  c,
-                  enrolledCount: enrolledCountByCourse[c.id] ?? 0,
-                  enrolled: enrolledCourseIds.contains(c.id),
+          SizedBox(
+            height: 290,
+            child: PageView.builder(
+              controller: PageController(viewportFraction: 0.82),
+              itemCount: visibleCourses.length,
+              itemBuilder: (context, index) {
+                final c = visibleCourses[index];
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  child: _recommendedCard(context, c, enrolledCountByCourse[c.id] ?? 0,
+                      enrolledCourseIds.contains(c.id), isDark, boldText, subtleText, bgCard, borderClr),
+                );
+              },
+            ),
+          ),
+        const SizedBox(height: 28),
+      ],
+    );
+  }
+
+  /// HOT carousel card (matches reference design)
+  Widget _hotCourseCard(
+    BuildContext context, Course course, int enrolledCount, bool enrolled,
+    bool isDark, Color boldText, Color subtleText, Color bgCard, Color borderClr,
+  ) {
+    return GestureDetector(
+      onTap: () => _handleCourseTap(context, course.id),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(22),
+          boxShadow: [
+            BoxShadow(color: const Color(0xFF6366F1).withAlpha(isDark ? 40 : 30), blurRadius: 20, offset: const Offset(0, 10)),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(22),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              // Background
+              course.thumbnailUrl.isNotEmpty
+                  ? CachedNetworkImage(imageUrl: course.thumbnailUrl, fit: BoxFit.cover)
+                  : Container(
+                      decoration: const BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [Color(0xFF312E81), Color(0xFF4338CA), Color(0xFF6366F1)],
+                          begin: Alignment.topLeft, end: Alignment.bottomRight,
+                        ),
+                      ),
+                    ),
+              // Gradient overlay
+              Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter, end: Alignment.bottomCenter,
+                    colors: [Colors.transparent, Colors.black.withAlpha(200)],
+                    stops: const [0.3, 1.0],
+                  ),
                 ),
               ),
-      ],
+              // HOT badge
+              Positioned(
+                top: 14, left: 14,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEF4444).withAlpha(200),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(width: 6, height: 6, decoration: const BoxDecoration(color: Color(0xFF4ADE80), shape: BoxShape.circle)),
+                      const SizedBox(width: 5),
+                      const Text('HOT', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 0.8)),
+                    ],
+                  ),
+                ),
+              ),
+              // Content at bottom
+              Positioned(
+                left: 18, right: 18, bottom: 18,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      course.title,
+                      maxLines: 2, overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800, height: 1.15),
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 14,
+                          backgroundColor: Colors.white.withAlpha(50),
+                          child: const Icon(Icons.person, size: 16, color: Colors.white),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            course.instructorName,
+                            maxLines: 1, overflow: TextOverflow.ellipsis,
+                            style: TextStyle(color: Colors.white.withAlpha(220), fontSize: 14, fontWeight: FontWeight.w500),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        const Icon(Icons.star_rounded, color: Color(0xFFFACC15), size: 18),
+                        const SizedBox(width: 3),
+                        Text(course.rating.toStringAsFixed(1),
+                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14)),
+                        const SizedBox(width: 14),
+                        Icon(Icons.groups_rounded, color: Colors.white.withAlpha(200), size: 18),
+                        const SizedBox(width: 4),
+                        Text('$enrolledCount enrolled',
+                            style: TextStyle(color: Colors.white.withAlpha(200), fontSize: 12)),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Recommended horizontal card (matches reference design)
+  Widget _recommendedCard(
+    BuildContext context, Course course, int enrolledCount, bool enrolled,
+    bool isDark, Color boldText, Color subtleText, Color bgCard, Color borderClr,
+  ) {
+    return GestureDetector(
+      onTap: () => _handleCourseTap(context, course.id),
+      child: Container(
+        decoration: BoxDecoration(
+          color: bgCard,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: borderClr),
+          boxShadow: [
+            if (!isDark) BoxShadow(color: Colors.black.withAlpha(8), blurRadius: 16, offset: const Offset(0, 8)),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Thumbnail
+              SizedBox(
+                height: 130,
+                width: double.infinity,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    course.thumbnailUrl.isNotEmpty
+                        ? CachedNetworkImage(imageUrl: course.thumbnailUrl, fit: BoxFit.cover)
+                        : Container(
+                            decoration: const BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [Color(0xFF4338CA), Color(0xFF6366F1)],
+                                begin: Alignment.topLeft, end: Alignment.bottomRight,
+                              ),
+                            ),
+                            child: const Icon(Icons.school_rounded, color: Colors.white54, size: 40),
+                          ),
+                    // Bottom gradient
+                    Positioned(
+                      bottom: 0, left: 0, right: 0,
+                      child: Container(
+                        height: 40,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter, end: Alignment.bottomCenter,
+                            colors: [Colors.transparent, Colors.black.withAlpha(90)],
+                          ),
+                        ),
+                      ),
+                    ),
+                    // Rating stars overlay
+                    Positioned(
+                      bottom: 8, left: 10,
+                      child: Row(
+                        children: List.generate(5, (i) {
+                          return Icon(
+                            i < course.rating.round() ? Icons.star_rounded : Icons.star_border_rounded,
+                            color: const Color(0xFFFACC15), size: 14,
+                          );
+                        }),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // Details
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        course.title,
+                        maxLines: 2, overflow: TextOverflow.ellipsis,
+                        style: TextStyle(color: boldText, fontWeight: FontWeight.w700, fontSize: 14, height: 1.2),
+                      ),
+                      const Spacer(),
+                      Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 10,
+                            backgroundColor: subtleText.withAlpha(30),
+                            child: Icon(Icons.person, size: 12, color: subtleText),
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              course.instructorName,
+                              maxLines: 1, overflow: TextOverflow.ellipsis,
+                              style: TextStyle(color: subtleText, fontSize: 12),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          const Icon(Icons.star_rounded, color: Color(0xFFFACC15), size: 14),
+                          const SizedBox(width: 3),
+                          Text(course.rating.toStringAsFixed(1),
+                              style: TextStyle(color: boldText, fontWeight: FontWeight.w700, fontSize: 12)),
+                          const SizedBox(width: 10),
+                          Icon(Icons.groups_rounded, color: subtleText, size: 14),
+                          const SizedBox(width: 3),
+                          Text('$enrolledCount enrolled',
+                              style: TextStyle(color: subtleText, fontSize: 11)),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -487,6 +769,78 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     );
   }
 
+  Widget _buildExploreTab(
+    BuildContext context,
+    List<Course> visibleCourses,
+    Map<String, int> enrolledCountByCourse,
+    Set<String> enrolledCourseIds,
+  ) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final boldText = isDark ? Colors.white : const Color(0xFF0F172A);
+    final subtleText = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+    final bgCard = isDark ? const Color(0xFF1E293B) : Colors.white;
+    final borderClr = isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
+      children: [
+        Text('Explore All Courses', style: TextStyle(color: boldText, fontSize: 22, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 4),
+        Text('${visibleCourses.length} courses available', style: TextStyle(color: subtleText, fontSize: 14)),
+        const SizedBox(height: 16),
+        if (visibleCourses.isEmpty)
+          _emptyCard(context, 'No courses available.')
+        else
+          ...visibleCourses.map(
+            (c) => _compactCourseCard(context, c,
+                enrolledCount: enrolledCountByCourse[c.id] ?? 0,
+                enrolled: enrolledCourseIds.contains(c.id)),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildWishlistTab(
+    BuildContext context,
+    AuthProvider auth,
+    List<Course> featured,
+    Map<String, int> enrolledCountByCourse,
+  ) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final boldText = isDark ? Colors.white : const Color(0xFF0F172A);
+    final subtleText = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+    final enrolledCourseIds = auth.currentUser?.courseIds.toSet() ?? <String>{};
+    final wishlist = featured.where((c) => c.isFeatured).toList();
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
+      children: [
+        Text('Wishlist', style: TextStyle(color: boldText, fontSize: 22, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 4),
+        Text('Your saved courses and favorites', style: TextStyle(color: subtleText, fontSize: 14)),
+        const SizedBox(height: 16),
+        if (!auth.isLoggedIn) ...[
+          _emptyCard(context, 'Log in to save courses to your wishlist.'),
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton(
+              onPressed: () => Navigator.of(context).pushNamed(LoginScreen.routeName),
+              child: const Text('Log in'),
+            ),
+          ),
+        ] else if (wishlist.isEmpty)
+          _emptyCard(context, 'No wishlist items yet. Explore courses and save your favorites!')
+        else
+          ...wishlist.map(
+            (c) => _compactCourseCard(context, c,
+                enrolledCount: enrolledCountByCourse[c.id] ?? 0,
+                enrolled: enrolledCourseIds.contains(c.id)),
+          ),
+      ],
+    );
+  }
+
   Widget _pill(BuildContext context, {required String label}) {
     final scheme = Theme.of(context).colorScheme;
     return Container(
@@ -565,7 +919,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                         topLeft: Radius.circular(16),
                         bottomLeft: Radius.circular(16),
                       ),
-                      child: Image.network(topCourse.thumbnailUrl, fit: BoxFit.cover),
+                      child: CachedNetworkImage(imageUrl: topCourse.thumbnailUrl, fit: BoxFit.cover),
                     )
                   : Icon(Icons.trending_up_rounded, color: scheme.primary, size: 28),
             ),
@@ -682,7 +1036,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
             height: 46,
             color: scheme.primary.withAlpha(10),
             child: course.thumbnailUrl.isNotEmpty
-                ? Image.network(course.thumbnailUrl, fit: BoxFit.cover)
+                ? CachedNetworkImage(imageUrl: course.thumbnailUrl, fit: BoxFit.cover)
                 : Icon(Icons.school_rounded, color: scheme.primary),
           ),
         ),
@@ -707,11 +1061,6 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
   }
 
   void _handleCourseTap(BuildContext context, String courseId) {
-    final auth = Provider.of<AuthProvider>(context, listen: false);
-    if (!auth.isLoggedIn) {
-      Navigator.of(context).pushNamed(LoginScreen.routeName);
-      return;
-    }
     Navigator.of(context).pushNamed(
       CourseDetailScreen.routeName,
       arguments: courseId,
@@ -749,111 +1098,107 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     var selectedCategory = _selectedCategory;
     final localDifficulty = Set<CourseDifficulty>.from(_difficultyFilters);
 
-    final applied = await showModalBottomSheet<bool>(
-          context: context,
-          showDragHandle: true,
-          shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-          ),
-          builder: (context) => StatefulBuilder(
-            builder: (context, setModalState) => Padding(
-              padding: const EdgeInsets.fromLTRB(18, 10, 18, 20),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Marketplace Filters',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
-                  ),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
-                    initialValue: categories.contains(selectedCategory)
-                        ? selectedCategory
-                        : _MarketplaceCategories.all,
-                    decoration: const InputDecoration(labelText: 'Category'),
-                    items: categories
-                        .map((c) => DropdownMenuItem(value: c, child: Text(c)))
-                        .toList(growable: false),
-                    onChanged: (v) {
-                      if (v != null) setModalState(() => selectedCategory = v);
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<_MarketplaceSort>(
-                    initialValue: sortMode,
-                    decoration: const InputDecoration(labelText: 'Sort by'),
-                    items: const [
-                      DropdownMenuItem(value: _MarketplaceSort.rating, child: Text('Top rated')),
-                      DropdownMenuItem(value: _MarketplaceSort.title, child: Text('Title A-Z')),
-                      DropdownMenuItem(value: _MarketplaceSort.price, child: Text('Price low-high')),
-                    ],
-                    onChanged: (v) {
-                      if (v != null) setModalState(() => sortMode = v);
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 8,
-                    children: CourseDifficulty.values.map((d) {
-                      final selected = localDifficulty.contains(d);
-                      final label = d.name[0].toUpperCase() + d.name.substring(1);
-                      return FilterChip(
-                        label: Text(label),
-                        selected: selected,
-                        onSelected: (on) {
-                          setModalState(() {
-                            if (on) {
-                              localDifficulty.add(d);
-                            } else {
-                              localDifficulty.remove(d);
-                            }
-                          });
-                        },
-                      );
-                    }).toList(growable: false),
-                  ),
-                  const SizedBox(height: 8),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Trending / Popular only'),
-                    value: trendingOnly,
-                    onChanged: (v) => setModalState(() => trendingOnly = v),
-                  ),
-                  const SizedBox(height: 8),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Featured only'),
-                    value: featuredOnly,
-                    onChanged: (v) => setModalState(() => featuredOnly = v),
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      TextButton(
-                        onPressed: () {
-                          setModalState(() {
-                            featuredOnly = false;
-                            trendingOnly = false;
-                            sortMode = _MarketplaceSort.rating;
-                            selectedCategory = _MarketplaceCategories.all;
-                            localDifficulty.clear();
-                          });
-                        },
-                        child: const Text('Reset'),
-                      ),
-                      const Spacer(),
-                      FilledButton(
-                        onPressed: () => Navigator.of(context).pop(true),
-                        child: const Text('Apply'),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+    final applied = await showDialog<bool>(
+      context: context,
+      builder: (context) => Dialog(
+        insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: StatefulBuilder(
+          builder: (context, setModalState) => Padding(
+            padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Marketplace Filters',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  initialValue: categories.contains(selectedCategory) ? selectedCategory : _MarketplaceCategories.all,
+                  decoration: const InputDecoration(labelText: 'Category'),
+                  items: categories.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(growable: false),
+                  onChanged: (v) {
+                    if (v != null) setModalState(() => selectedCategory = v);
+                  },
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<_MarketplaceSort>(
+                  initialValue: sortMode,
+                  decoration: const InputDecoration(labelText: 'Sort by'),
+                  items: const [
+                    DropdownMenuItem(value: _MarketplaceSort.rating, child: Text('Top rated')),
+                    DropdownMenuItem(value: _MarketplaceSort.title, child: Text('Title A-Z')),
+                    DropdownMenuItem(value: _MarketplaceSort.price, child: Text('Price low-high')),
+                  ],
+                  onChanged: (v) {
+                    if (v != null) setModalState(() => sortMode = v);
+                  },
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  children: CourseDifficulty.values.map((d) {
+                    final selected = localDifficulty.contains(d);
+                    final label = d.name[0].toUpperCase() + d.name.substring(1);
+                    return FilterChip(
+                      label: Text(label),
+                      selected: selected,
+                      onSelected: (on) {
+                        setModalState(() {
+                          if (on) {
+                            localDifficulty.add(d);
+                          } else {
+                            localDifficulty.remove(d);
+                          }
+                        });
+                      },
+                    );
+                  }).toList(growable: false),
+                ),
+                const SizedBox(height: 8),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Trending / Popular only'),
+                  value: trendingOnly,
+                  onChanged: (v) => setModalState(() => trendingOnly = v),
+                ),
+                const SizedBox(height: 8),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Featured only'),
+                  value: featuredOnly,
+                  onChanged: (v) => setModalState(() => featuredOnly = v),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    TextButton(
+                      onPressed: () {
+                        setModalState(() {
+                          featuredOnly = false;
+                          trendingOnly = false;
+                          sortMode = _MarketplaceSort.rating;
+                          selectedCategory = _MarketplaceCategories.all;
+                          localDifficulty.clear();
+                        });
+                      },
+                      child: const Text('Reset'),
+                    ),
+                    const Spacer(),
+                    FilledButton(
+                      onPressed: () => Navigator.of(context).pop(true),
+                      child: const Text('Apply'),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
-        ) ??
+        ),
+      ),
+    ) ??
         false;
 
     if (!mounted || !applied) return;
@@ -922,6 +1267,140 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     );
   }
 
+  Future<void> _openMentorInboxSheet() async {
+    List<Map<String, dynamic>> notifications = const [];
+    bool loading = true;
+
+    try {
+      notifications = await ApiService.instance.getMentorNotifications();
+    } catch (_) {
+      notifications = const [];
+    } finally {
+      loading = false;
+    }
+
+    await showGeneralDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Dismiss',
+      barrierColor: Colors.black.withOpacity(0.3),
+      transitionDuration: const Duration(milliseconds: 260),
+      pageBuilder: (ctx, a1, a2) {
+        return Align(
+          alignment: Alignment.centerRight,
+          child: Material(
+            elevation: 16,
+            borderRadius: const BorderRadius.horizontal(left: Radius.circular(24)),
+            child: SizedBox(
+              width: MediaQuery.of(context).size.width > 400 ? 380 : MediaQuery.of(context).size.width * 0.85,
+              height: double.infinity,
+              child: SafeArea(
+                child: Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 24, 16, 16),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFE0E7FF),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Icon(
+                              Icons.notifications_active_rounded,
+                              color: Color(0xFF4338CA),
+                              size: 20,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Text('Mentor Inbox', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                          const Spacer(),
+                          IconButton(onPressed: () => Navigator.of(ctx).pop(), icon: const Icon(Icons.close_rounded)),
+                        ],
+                      ),
+                    ),
+                    const Divider(height: 1),
+                    Expanded(
+                      child: loading
+                          ? const Center(child: CircularProgressIndicator())
+                          : notifications.isEmpty
+                              ? Center(child: Text('No notifications', style: Theme.of(context).textTheme.bodyMedium))
+                              : ListView.separated(
+                                  padding: const EdgeInsets.all(12),
+                                  itemCount: notifications.length,
+                                  separatorBuilder: (_, __) => const SizedBox(height: 8),
+                                  itemBuilder: (context, index) {
+                                    final item = notifications[index];
+                                    final title = (item['title'] ?? 'Notification').toString();
+                                    final message = (item['message'] ?? '').toString();
+                                    final createdAt = (item['created_at'] ?? '').toString();
+                                    final id = (item['id'] ?? '').toString();
+                                    final isRead = item['read'] == true;
+
+                                    return InkWell(
+                                      onTap: () async {
+                                        if (id.isEmpty) return;
+                                        try {
+                                          await ApiService.instance.markNotificationRead(id);
+                                        } catch (_) {}
+                                        Navigator.of(ctx).pop();
+                                        // Re-open to refresh
+                                        _openMentorInboxSheet();
+                                      },
+                                      child: Container(
+                                        padding: const EdgeInsets.all(12),
+                                        decoration: BoxDecoration(
+                                          color: Colors.white,
+                                          borderRadius: BorderRadius.circular(14),
+                                          border: Border.all(color: const Color(0xFFDBEAFE)),
+                                        ),
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Row(
+                                              children: [
+                                                Expanded(
+                                                  child: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+                                                ),
+                                                const SizedBox(width: 8),
+                                                Container(
+                                                  width: 7,
+                                                  height: 7,
+                                                  decoration: BoxDecoration(
+                                                    color: isRead ? const Color(0xFF94A3B8) : const Color(0xFF2563EB),
+                                                    shape: BoxShape.circle,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 6),
+                                            Text(message),
+                                            const SizedBox(height: 8),
+                                            Text('Received: $createdAt', style: Theme.of(context).textTheme.bodySmall),
+                                          ],
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+      transitionBuilder: (context, anim1, anim2, child) {
+        return SlideTransition(
+          position: Tween<Offset>(begin: const Offset(1, 0), end: Offset.zero).animate(CurvedAnimation(parent: anim1, curve: Curves.easeOutCubic)),
+          child: child,
+        );
+      },
+    );
+  }
+
   void _openNotifications(BuildContext context, AuthProvider auth) {
     if (!auth.isLoggedIn) {
       Navigator.of(context).pushNamed(LoginScreen.routeName);
@@ -935,9 +1414,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
         );
         return;
       case UserRole.mentor:
-        Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const MentorNotificationsScreen()),
-        );
+        _openMentorInboxSheet();
         return;
       case UserRole.admin:
       default:
@@ -950,8 +1427,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
 
   String _primaryActionLabel(Course course, {required bool enrolled}) {
     if (enrolled) return 'View';
-    if (course.price <= 0) return 'Enroll';
-    return 'Buy';
+    return 'Buy Now';
   }
 
   Future<void> _handlePrimaryAction(
@@ -959,58 +1435,15 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     Course course, {
     required bool enrolled,
   }) async {
-    final auth = context.read<AuthProvider>();
-    final scheme = Theme.of(context).colorScheme;
-
     if (enrolled) {
       Navigator.of(context).pushNamed(CourseDetailScreen.routeName, arguments: course.id);
       return;
     }
 
-    if (!auth.isLoggedIn) {
-      Navigator.of(context).pushNamed(LoginScreen.routeName);
-      return;
-    }
-
-    if (auth.currentRole != UserRole.student) {
-      Navigator.of(context).pushNamed(CourseDetailScreen.routeName, arguments: course.id);
-      return;
-    }
-
-    final costCoins = course.price.round();
-    final student = context.read<StudentProvider>();
-
-    if (costCoins > 0) {
-      final ok = await student.spendCoins(costCoins);
-      if (!ok) {
-        if (!context.mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Not enough coins. Need $costCoins.'),
-            backgroundColor: scheme.error,
-          ),
-        );
-        return;
-      }
-    }
-
-    try {
-      await ApiService.instance.enrollInCourse(course.id);
-      await auth.refreshCurrentUser();
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Enrolled in ${course.title}')),
-      );
-    } catch (e) {
-      if (costCoins > 0) {
-        // Best-effort rollback if API fails.
-        await student.addCoins(costCoins);
-      }
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Enroll failed: $e')),
-      );
-    }
+    await launchUrl(
+      Uri.parse('https://jenovate.in/'),
+      mode: LaunchMode.externalApplication,
+    );
   }
 
   Widget _skeletonFeaturedCard(BuildContext context) {
@@ -1257,52 +1690,32 @@ class _MarketplaceCategories {
 class _MarketplaceBottomNav extends StatelessWidget {
   const _MarketplaceBottomNav({
     required this.currentIndex,
-    required this.onHome,
-    required this.onCourses,
-    required this.onProfile,
+    required this.onTap,
   });
 
   final int currentIndex;
-  final VoidCallback onHome;
-  final VoidCallback onCourses;
-  final VoidCallback onProfile;
+  final ValueChanged<int> onTap;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
     return Container(
       decoration: BoxDecoration(
-        color: scheme.surface,
+        color: isDark ? const Color(0xFF0F172A) : Colors.white,
         border: Border(top: BorderSide(color: scheme.onSurface.withAlpha(12))),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withAlpha(8), blurRadius: 10, offset: const Offset(0, -4)),
+        ],
       ),
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+      padding: const EdgeInsets.fromLTRB(4, 8, 4, 10),
       child: Row(
         children: [
-          Expanded(
-            child: _BottomItem(
-              icon: currentIndex == 0 ? Icons.home_rounded : Icons.home_outlined,
-              label: 'Home',
-              active: currentIndex == 0,
-              onTap: onHome,
-            ),
-          ),
-          Expanded(
-            child: _BottomItem(
-              icon: currentIndex == 1 ? Icons.menu_book_rounded : Icons.menu_book_outlined,
-              label: 'My Courses',
-              active: currentIndex == 1,
-              onTap: onCourses,
-            ),
-          ),
-          Expanded(
-            child: _BottomItem(
-              icon: currentIndex == 2 ? Icons.person_rounded : Icons.person_outline_rounded,
-              label: 'Profile',
-              active: currentIndex == 2,
-              onTap: onProfile,
-            ),
-          ),
+          Expanded(child: _BottomItem(icon: currentIndex == 0 ? Icons.home_rounded : Icons.home_outlined, label: 'Home', active: currentIndex == 0, onTap: () => onTap(0))),
+          Expanded(child: _BottomItem(icon: currentIndex == 1 ? Icons.explore_rounded : Icons.explore_outlined, label: 'Explore', active: currentIndex == 1, onTap: () => onTap(1))),
+          Expanded(child: _BottomItem(icon: currentIndex == 2 ? Icons.menu_book_rounded : Icons.menu_book_outlined, label: 'My Courses', active: currentIndex == 2, onTap: () => onTap(2))),
+          Expanded(child: _BottomItem(icon: currentIndex == 3 ? Icons.person_rounded : Icons.person_outline_rounded, label: 'Profile', active: currentIndex == 3, onTap: () => onTap(3))),
         ],
       ),
     );

@@ -1,21 +1,15 @@
 import 'dart:async';
-import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
-import '../../../../config/theme.dart';
 import '../../../../models/shop_item.dart';
 import '../../../../providers/auth_provider.dart';
 import '../../../../providers/shop_provider.dart';
-import '../providers/student_nav_provider.dart';
+import '../../../../utils/ui_utils.dart';
+import '../../../../widgets/shop_image_thumb.dart';
 import '../providers/student_provider.dart';
-import '../widgets/student_header_row.dart';
-import '../widgets/student_hero_card.dart';
-import 'student_notifications_screen.dart';
 
 class StudentShopScreen extends StatefulWidget {
   const StudentShopScreen({super.key});
@@ -25,10 +19,9 @@ class StudentShopScreen extends StatefulWidget {
 }
 
 class _StudentShopScreenState extends State<StudentShopScreen> {
-  int _selectedFilter = 0;
-  final _filters = const ['All Items', 'Courses', 'Merchandise'];
   final _searchController = TextEditingController();
   Timer? _syncTimer;
+  String _filter = 'all';
 
   @override
   void initState() {
@@ -36,7 +29,11 @@ class _StudentShopScreenState extends State<StudentShopScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       context.read<ShopProvider>().fetchShopItems();
-      _syncTimer = Timer.periodic(const Duration(seconds: 20), (_) {
+      final user = context.read<AuthProvider>().currentUser;
+      if (user != null) {
+        context.read<StudentProvider>().fetchPurchasedItems(user.id);
+      }
+      _syncTimer = Timer.periodic(const Duration(seconds: 25), (_) {
         if (!mounted) return;
         context.read<ShopProvider>().fetchShopItems();
       });
@@ -50,192 +47,296 @@ class _StudentShopScreenState extends State<StudentShopScreen> {
     super.dispose();
   }
 
-  Future<void> _buyItem(BuildContext context, ShopItem item) async {
-    final scheme = Theme.of(context).colorScheme;
+  Future<void> _refresh() async {
+    await context.read<ShopProvider>().fetchShopItems();
+    final user = context.read<AuthProvider>().currentUser;
+    if (user != null && mounted) {
+      await context.read<StudentProvider>().fetchPurchasedItems(user.id);
+    }
+  }
+
+  Future<void> _buyItem(ShopItem item) async {
     final student = context.read<StudentProvider>();
     final shop = context.read<ShopProvider>();
+    final user = context.read<AuthProvider>().currentUser;
 
-    final costCoins = item.price;
-    if (costCoins > 0) {
-      if (student.coins < costCoins) {
-        if (!context.mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Not enough coins. Need $costCoins.'),
-            backgroundColor: scheme.error,
-          ),
-        );
-        return;
-      }
+    if (user == null) {
+      showTopNotification(context, 'Log in to purchase rewards.');
+      return;
+    }
+    if (student.isItemPurchased(item.id)) {
+      showTopNotification(context, 'You already own ${item.name}.');
+      return;
+    }
+    if (student.coins < item.price) {
+      showTopNotification(context, 'Not enough coins. Need ${item.price}.');
+      return;
     }
 
-    try {
-      final remainingCoins = await shop.purchaseItem(item.id);
-      if (remainingCoins == null) {
-        throw Exception(shop.errorMessage ?? 'Purchase failed');
+    final remaining = await shop.purchaseItem(
+      userId: user.id,
+      itemId: item.id,
+      itemPrice: item.price,
+      currentCoins: student.coins,
+    );
+
+    if (!mounted) return;
+    if (remaining != null) {
+      await student.setCoins(remaining);
+      if (mounted) {
+        context.read<AuthProvider>().updateCurrentUserCoins(remaining);
       }
-
-      await student.setCoins(remainingCoins);
-      if (!context.mounted) return;
-
-      await shop.fetchShopItems();
-
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Purchased ${item.name}')),
-      );
-    } catch (e) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Purchase failed: $e')),
-      );
+      await student.addPurchasedItemOffline(item);
+      showTopNotification(context, 'Purchased ${item.name}.');
+    } else {
+      showTopNotification(context, shop.errorMessage ?? 'Purchase failed.');
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    final auth = context.watch<AuthProvider>();
-    final student = context.watch<StudentProvider>();
     final shop = context.watch<ShopProvider>();
-    
-    final username = auth.currentUser?.username ?? auth.currentUser?.name ?? 'Student';
-    
-    // Background color strictly light/pastel as requested
-    const bgColor = Color(0xFFF5F7FA);
+    final student = context.watch<StudentProvider>();
+    final theme = Theme.of(context);
+    final query = _searchController.text.trim().toLowerCase();
+    final ownedCount = shop.items
+        .where((item) => student.isItemPurchased(item.id))
+        .length;
+
+    final visibleItems = shop.items
+        .where((item) {
+          final matchesSearch =
+              query.isEmpty || item.name.toLowerCase().contains(query);
+          final purchased = student.isItemPurchased(item.id);
+          final affordable = student.coins >= item.price;
+          final matchesFilter = switch (_filter) {
+            'owned' => purchased,
+            'affordable' => affordable && !purchased,
+            _ => true,
+          };
+          return matchesSearch && matchesFilter;
+        })
+        .toList(growable: false);
 
     return Scaffold(
-      backgroundColor: bgColor,
+      backgroundColor: theme.scaffoldBackgroundColor,
       body: SafeArea(
-        child: CustomScrollView(
-          physics: const BouncingScrollPhysics(),
-          slivers: [
-            // ── Header ──────────────────────────
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
-                child: Column(
-                  children: [
-                    StudentHeaderRow(
-                      onNotificationsTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => const StudentNotificationsScreen()),
-                      ),
-                      onProfileTap: () => context.read<StudentNavProvider>().setIndex(4),
-                    ),
-                    const SizedBox(height: 20),
-                    
-                    // ── Search Bar ──────────────────────────
-                    Container(
-                      height: 52,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(100),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.04),
-                            blurRadius: 10,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: TextField(
-                        controller: _searchController,
-                        style: GoogleFonts.poppins(fontSize: 14, color: const Color(0xFF1A1A1A)),
-                        decoration: InputDecoration(
-                          hintText: 'Search marketplace...',
-                          hintStyle: GoogleFonts.poppins(fontSize: 14, color: const Color(0xFF9CA3AF)),
-                          prefixIcon: const Icon(Icons.search_rounded, color: Color(0xFF3B82F6), size: 22),
-                          suffixIcon: Container(
-                            margin: const EdgeInsets.all(8),
-                            decoration: const BoxDecoration(
-                              color: Color(0xFFF0F7FF),
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(Icons.tune_rounded, size: 18, color: Color(0xFF3B82F6)),
-                          ),
-                          border: InputBorder.none,
-                          contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-                        ),
-                      ),
-                    ).animate().fadeIn(duration: 400.ms).slideY(begin: 0.1, end: 0),
-                    
-                    const SizedBox(height: 20),
-                    
-                    StudentHeroCard(
-                      username: username,
-                      subtitle: 'Redeem coins for courses & merchandise',
-                      coins: student.coins,
-                      streakDays: student.streakCount,
-                      gender: student.gender,
-                      profileImageBytes: student.profileImageBytes,
-                    ).animate().fadeIn(duration: 300.ms),
-                    
-                    const SizedBox(height: 24),
-
-                    // ── Filter chips (Rounded Pills) ──────────────────────────
-                    SizedBox(
-                      height: 44,
-                      child: ListView.separated(
-                        scrollDirection: Axis.horizontal,
-                        itemCount: _filters.length,
-                        separatorBuilder: (_, __) => const SizedBox(width: 10),
-                        itemBuilder: (context, i) => _ShopFilterChip(
-                          label: _filters[i],
-                          selected: _selectedFilter == i,
-                          onTap: () => setState(() => _selectedFilter = i),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                  ],
-                ),
-              ),
-            ),
-
-            // ── Items List ──────────────────────────
-            if (shop.isLoading)
-              const SliverFillRemaining(
-                child: Center(child: CircularProgressIndicator(color: Color(0xFF3B82F6))),
-              )
-            else if (shop.items.isEmpty)
-              SliverFillRemaining(
-                child: Center(
+        child: RefreshIndicator(
+          onRefresh: _refresh,
+          child: CustomScrollView(
+            slivers: [
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 16, 18, 8),
                   child: Column(
-                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(Icons.shopping_bag_outlined, size: 64, color: Colors.grey.shade300),
+                      _ShopHeader(
+                        coins: student.coins,
+                        totalItems: shop.items.length,
+                        ownedItems: ownedCount,
+                      ),
                       const SizedBox(height: 16),
-                      Text(
-                        'No items found',
-                        style: GoogleFonts.poppins(fontSize: 16, color: Colors.grey.shade500),
+                      _ShopSearchBar(
+                        controller: _searchController,
+                        onChanged: () => setState(() {}),
+                      ),
+                      const SizedBox(height: 12),
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            _FilterPill(
+                              label: 'All rewards',
+                              icon: Icons.storefront_outlined,
+                              selected: _filter == 'all',
+                              onTap: () => setState(() => _filter = 'all'),
+                            ),
+                            _FilterPill(
+                              label: 'Can buy',
+                              icon: Icons.local_offer_outlined,
+                              selected: _filter == 'affordable',
+                              onTap: () =>
+                                  setState(() => _filter = 'affordable'),
+                            ),
+                            _FilterPill(
+                              label: 'Owned',
+                              icon: Icons.inventory_2_outlined,
+                              selected: _filter == 'owned',
+                              onTap: () => setState(() => _filter = 'owned'),
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   ),
                 ),
-              )
-            else
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
-                sliver: SliverList(
-                  delegate: SliverChildBuilderDelegate(
-                    (context, i) {
-                      final item = shop.items[i];
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 16),
-                        child: _ShopCard(
-                          item: item,
-                          priceCoins: item.price,
-                          index: i,
-                          coins: student.coins,
-                          onBuy: () => _buyItem(context, item),
-                        ),
+              ),
+              if (shop.isLoading)
+                const SliverFillRemaining(
+                  child: Center(child: CircularProgressIndicator()),
+                )
+              else if (visibleItems.isEmpty)
+                SliverFillRemaining(
+                  child: _EmptyShopState(
+                    message:
+                        shop.errorMessage ?? 'No rewards match your filters.',
+                  ),
+                )
+              else
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(18, 10, 18, 28),
+                  sliver: SliverList.separated(
+                    itemCount: visibleItems.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 12),
+                    itemBuilder: (context, index) {
+                      final item = visibleItems[index];
+                      return _RewardRow(
+                        item: item,
+                        owned: student.isItemPurchased(item.id),
+                        affordable: student.coins >= item.price,
+                        onBuy: () => _buyItem(item),
                       );
                     },
-                    childCount: shop.items.length,
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ShopHeader extends StatelessWidget {
+  const _ShopHeader({
+    required this.coins,
+    required this.totalItems,
+    required this.ownedItems,
+  });
+
+  final int coins;
+  final int totalItems;
+  final int ownedItems;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: const Color(0xFF101827),
+        borderRadius: BorderRadius.circular(8),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF101827).withValues(alpha: 0.18),
+            blurRadius: 22,
+            offset: const Offset(0, 12),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Student Shop',
+                  style: GoogleFonts.poppins(
+                    color: Colors.white,
+                    fontSize: 24,
+                    fontWeight: FontWeight.w800,
                   ),
                 ),
               ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 9,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFD166),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.monetization_on_rounded,
+                      color: Color(0xFF7A4A00),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      '$coins',
+                      style: GoogleFonts.poppins(
+                        color: const Color(0xFF4A2F00),
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Redeem coins for profile rewards and learning perks.',
+            style: GoogleFonts.poppins(
+              color: const Color(0xFFCBD5E1),
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              _ShopMetric(label: 'Rewards', value: '$totalItems'),
+              const SizedBox(width: 10),
+              _ShopMetric(label: 'Owned', value: '$ownedItems'),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ShopMetric extends StatelessWidget {
+  const _ShopMetric({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              value,
+              style: GoogleFonts.poppins(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            Text(
+              label,
+              style: GoogleFonts.poppins(
+                color: const Color(0xFF94A3B8),
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ],
         ),
       ),
@@ -243,58 +344,95 @@ class _StudentShopScreenState extends State<StudentShopScreen> {
   }
 }
 
-// ─── Filter chip ──────────────────────────────────────────────────────────────
-class _ShopFilterChip extends StatelessWidget {
-  const _ShopFilterChip({
+class _ShopSearchBar extends StatelessWidget {
+  const _ShopSearchBar({required this.controller, required this.onChanged});
+
+  final TextEditingController controller;
+  final VoidCallback onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return TextField(
+      controller: controller,
+      onChanged: (_) => onChanged(),
+      decoration: InputDecoration(
+        hintText: 'Search rewards',
+        prefixIcon: const Icon(Icons.search_rounded),
+        suffixIcon: controller.text.isEmpty
+            ? null
+            : IconButton(
+                onPressed: () {
+                  controller.clear();
+                  onChanged();
+                },
+                icon: const Icon(Icons.close_rounded),
+              ),
+        filled: true,
+        fillColor: scheme.surface,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(
+            color: isDark ? const Color(0xFF334155) : const Color(0xFFD8E0EA),
+          ),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(
+            color: isDark ? const Color(0xFF334155) : const Color(0xFFD8E0EA),
+          ),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: Color(0xFF2563EB), width: 1.4),
+        ),
+      ),
+    );
+  }
+}
+
+class _FilterPill extends StatelessWidget {
+  const _FilterPill({
     required this.label,
+    required this.icon,
     required this.selected,
     required this.onTap,
   });
 
   final String label;
+  final IconData icon;
   final bool selected;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-        decoration: BoxDecoration(
-          gradient: selected
-              ? const LinearGradient(
-                  colors: [Color(0xFF3B82F6), Color(0xFF2563EB)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                )
-              : null,
-          color: selected ? null : Colors.white,
-          borderRadius: BorderRadius.circular(100),
-          boxShadow: [
-            if (selected)
-              BoxShadow(
-                color: const Color(0xFF3B82F6).withValues(alpha: 0.3),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              )
-            else
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.02),
-                blurRadius: 4,
-                offset: const Offset(0, 2),
-              ),
-          ],
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: ChoiceChip(
+        avatar: Icon(
+          icon,
+          size: 16,
+          color: selected ? Colors.white : scheme.onSurface.withAlpha(190),
         ),
-        child: Center(
-          child: Text(
-            label,
-            style: GoogleFonts.poppins(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: selected ? Colors.white : const Color(0xFF6B7280),
-            ),
+        label: Text(label),
+        selected: selected,
+        onSelected: (_) => onTap(),
+        labelStyle: GoogleFonts.poppins(
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+          color: selected ? Colors.white : scheme.onSurface.withAlpha(190),
+        ),
+        selectedColor: const Color(0xFF2563EB),
+        backgroundColor: scheme.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+          side: BorderSide(
+            color: selected
+                ? const Color(0xFF2563EB)
+                : (isDark ? const Color(0xFF334155) : const Color(0xFFD8E0EA)),
           ),
         ),
       ),
@@ -302,183 +440,204 @@ class _ShopFilterChip extends StatelessWidget {
   }
 }
 
-// ─── Shop item card (Horizontal Layout) ───────────────────────────────────────
-class _ShopCard extends StatefulWidget {
-  const _ShopCard({
+class _RewardRow extends StatelessWidget {
+  const _RewardRow({
     required this.item,
-    required this.priceCoins,
-    required this.index,
-    required this.coins,
+    required this.owned,
+    required this.affordable,
     required this.onBuy,
   });
 
   final ShopItem item;
-  final int priceCoins;
-  final int index;
-  final int coins;
+  final bool owned;
+  final bool affordable;
   final VoidCallback onBuy;
 
   @override
-  State<_ShopCard> createState() => _ShopCardState();
-}
-
-class _ShopCardState extends State<_ShopCard> {
-  bool _pressed = false;
-
-  @override
   Widget build(BuildContext context) {
-    final canAfford = widget.coins >= widget.priceCoins;
-
-    return GestureDetector(
-      onTapDown: (_) => setState(() => _pressed = true),
-      onTapUp: (_) => setState(() => _pressed = false),
-      onTapCancel: () => setState(() => _pressed = false),
-      onTap: widget.onBuy,
-      child: AnimatedScale(
-        duration: const Duration(milliseconds: 120),
-        scale: _pressed ? 0.98 : 1.0,
-        child: Container(
-          height: 120,
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.03),
-                blurRadius: 15,
-                offset: const Offset(0, 5),
-              ),
-            ],
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: isDark ? const Color(0xFF334155) : const Color(0xFFD8E0EA),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Theme.of(
+              context,
+            ).shadowColor.withValues(alpha: isDark ? 0.18 : 0.05),
+            blurRadius: 14,
+            offset: const Offset(0, 8),
           ),
-          child: Row(
-            children: [
-              // Thumbnail Left
-              Hero(
-                tag: 'shop_item_${widget.item.id}',
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(16),
-                  child: AspectRatio(
-                    aspectRatio: 1,
-                    child: Container(
-                      color: const Color(0xFFF8FAFF),
-                      child: widget.item.imageUrl.isNotEmpty
-                          ? _ShopImage(imageUrl: widget.item.imageUrl)
-                          : _ShopThumbnailPlaceholder(),
-                    ),
-                  ),
-                ),
+        ],
+      ),
+      child: Row(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: SizedBox(
+              width: 86,
+              height: 86,
+              child: ShopImageThumb(
+                imageUrl: item.imageUrl,
+                size: double.infinity,
               ),
-              const SizedBox(width: 16),
-              
-              // Info Right
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
                   children: [
+                    Expanded(
+                      child: Text(
+                        item.name,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.poppins(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w800,
+                          color: scheme.onSurface,
+                        ),
+                      ),
+                    ),
+                    if (owned) const _SmallBadge(label: 'Owned'),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.monetization_on_rounded,
+                      size: 18,
+                      color: Color(0xFFEAB308),
+                    ),
+                    const SizedBox(width: 4),
                     Text(
-                      widget.item.name,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
+                      '${item.price}',
                       style: GoogleFonts.poppins(
                         fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: const Color(0xFF1A1A1A),
+                        fontWeight: FontWeight.w800,
+                        color: const Color(0xFF713F12),
                       ),
                     ),
                     const Spacer(),
-                    Row(
-                      children: [
-                        Icon(Icons.stars_rounded, size: 18, color: LmsAdminTheme.coinGold),
-                        const SizedBox(width: 6),
-                        Text(
-                          '${widget.priceCoins}',
-                          style: GoogleFonts.poppins(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w800,
-                            color: LmsAdminTheme.coinGold,
-                          ),
+                    FilledButton.icon(
+                      onPressed: owned || !affordable ? null : onBuy,
+                      icon: Icon(
+                        owned
+                            ? Icons.check_rounded
+                            : Icons.shopping_bag_outlined,
+                        size: 16,
+                      ),
+                      label: Text(owned ? 'Owned' : 'Buy'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: const Color(0xFF2563EB),
+                        disabledBackgroundColor: isDark
+                            ? const Color(0xFF334155)
+                            : const Color(0xFFE2E8F0),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
                         ),
-                        const Spacer(),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                          decoration: BoxDecoration(
-                            gradient: canAfford
-                                ? const LinearGradient(
-                                    colors: [Color(0xFF3B82F6), Color(0xFF2563EB)],
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
-                                  )
-                                : null,
-                            color: canAfford ? null : const Color(0xFFF3F4F6),
-                            borderRadius: BorderRadius.circular(100),
-                          ),
-                          child: Text(
-                            'Redeem',
-                            style: GoogleFonts.poppins(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              color: canAfford ? Colors.white : const Color(0xFF9CA3AF),
-                            ),
-                          ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
                         ),
-                      ],
+                        textStyle: GoogleFonts.poppins(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
                     ),
                   ],
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
+        ],
       ),
-    ).animate(delay: Duration(milliseconds: widget.index * 60))
-        .fadeIn(duration: 400.ms)
-        .slideX(begin: 0.1, end: 0);
-  }
-}
-
-class _ShopImage extends StatelessWidget {
-  _ShopImage({required this.imageUrl});
-
-  final String imageUrl;
-
-  @override
-  Widget build(BuildContext context) {
-    if (imageUrl.startsWith('data:image/')) {
-      final bytes = _decodeDataUrl(imageUrl);
-      if (bytes != null && bytes.isNotEmpty) {
-        return Image.memory(bytes, fit: BoxFit.cover, errorBuilder: (_, __, ___) => _ShopThumbnailPlaceholder());
-      }
-      return _ShopThumbnailPlaceholder();
-    }
-
-    return Image.network(
-      imageUrl,
-      fit: BoxFit.cover,
-      errorBuilder: (_, __, ___) => _ShopThumbnailPlaceholder(),
     );
   }
-
-  Uint8List? _decodeDataUrl(String input) {
-    final comma = input.indexOf(',');
-    if (comma < 0 || comma + 1 >= input.length) return null;
-    try {
-      return base64Decode(input.substring(comma + 1));
-    } catch (_) {
-      return null;
-    }
-  }
 }
 
-class _ShopThumbnailPlaceholder extends StatelessWidget {
-  _ShopThumbnailPlaceholder();
+class _SmallBadge extends StatelessWidget {
+  const _SmallBadge({required this.label});
+  final String label;
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
-      color: const Color(0xFF3B82F6).withValues(alpha: 0.05),
-      child: const Center(
-        child: Icon(Icons.shopping_bag_outlined, color: Color(0xFF3B82F6), size: 28),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF064E3B) : const Color(0xFFE8F7EF),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: isDark ? const Color(0xFF059669) : const Color(0xFFBDE8CF),
+        ),
+      ),
+      child: Text(
+        label,
+        style: GoogleFonts.poppins(
+          color: isDark ? scheme.onSurface : const Color(0xFF167A3F),
+          fontSize: 10,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+    );
+  }
+}
+
+class _EmptyShopState extends StatelessWidget {
+  const _EmptyShopState({required this.message});
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 78,
+              height: 78,
+              decoration: BoxDecoration(
+                color: scheme.surface,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: isDark
+                      ? const Color(0xFF334155)
+                      : const Color(0xFFD8E0EA),
+                ),
+              ),
+              child: Icon(
+                Icons.shopping_bag_outlined,
+                size: 36,
+                color: scheme.onSurface.withAlpha(130),
+              ),
+            ),
+            const SizedBox(height: 14),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.poppins(
+                fontWeight: FontWeight.w700,
+                color: scheme.onSurface.withAlpha(150),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

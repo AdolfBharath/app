@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:my_app/widgets/mentor_inbox_sheet.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../models/course.dart';
@@ -7,7 +9,6 @@ import '../../../../providers/auth_provider.dart';
 import '../../../../services/api_service.dart';
 import '../../../../screens/login_screen.dart';
 import 'mentor_create_announcement_screen.dart';
-import 'mentor_notifications_screen.dart';
 import '../providers/mentor_provider.dart';
 import '../../../../config/theme.dart';
 
@@ -31,13 +32,58 @@ class ManageCourseScreen extends StatefulWidget {
 class _ManageCourseScreenState extends State<ManageCourseScreen> {
   String _courseFilter = 'All';
 
-  Future<void> _showEditCourseModal(Course course) async {
-    final selectedOption = await showModalBottomSheet<_EditCourseOption>(
+  Future<T?> _showSidePanel<T>(BuildContext context, Widget child) {
+    return showGeneralDialog<T>(
       context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (ctx) => _EditCourseOptionsSheet(course: course),
+      barrierDismissible: true,
+      barrierLabel: 'Dismiss',
+      barrierColor: Colors.black.withOpacity(0.3),
+      transitionDuration: const Duration(milliseconds: 300),
+      pageBuilder: (context, anim1, anim2) {
+        return Align(
+          alignment: Alignment.centerRight,
+          child: Material(
+            elevation: 16,
+            borderRadius: const BorderRadius.horizontal(
+              left: Radius.circular(24),
+            ),
+            child: SizedBox(
+              width: MediaQuery.of(context).size.width > 500
+                  ? 500
+                  : MediaQuery.of(context).size.width * 0.9,
+              height: double.infinity,
+              child: SafeArea(
+                child: Container(
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.horizontal(
+                      left: Radius.circular(24),
+                    ),
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: child,
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+      transitionBuilder: (context, anim1, anim2, child) {
+        return SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(1, 0),
+            end: Offset.zero,
+          ).animate(CurvedAnimation(parent: anim1, curve: Curves.easeOutCubic)),
+          child: child,
+        );
+      },
+    );
+  }
+
+  Future<void> _showEditCourseModal(Course course) async {
+    final selectedOption = await _showSidePanel<_EditCourseOption>(
+      context,
+      _EditCourseOptionsSheet(course: course),
     );
 
     if (selectedOption == null || !mounted) return;
@@ -45,43 +91,27 @@ class _ManageCourseScreenState extends State<ManageCourseScreen> {
     bool? saved;
     switch (selectedOption) {
       case _EditCourseOption.details:
-        saved = await showModalBottomSheet<bool>(
-          context: context,
-          isScrollControlled: true,
-          shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-          ),
-          builder: (_) => _EditCourseDetailsBottomSheet(course: course),
+        saved = await _showSidePanel<bool>(
+          context,
+          _EditCourseDetailsBottomSheet(course: course),
         );
         break;
       case _EditCourseOption.modules:
-        saved = await showModalBottomSheet<bool>(
-          context: context,
-          isScrollControlled: true,
-          shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-          ),
-          builder: (_) => _EditCourseBottomSheet(course: course),
+        saved = await _showSidePanel<bool>(
+          context,
+          _EditCourseBottomSheet(course: course),
         );
         break;
       case _EditCourseOption.studyMaterials:
-        saved = await showModalBottomSheet<bool>(
-          context: context,
-          isScrollControlled: true,
-          shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-          ),
-          builder: (_) => _StudyMaterialBottomSheet(course: course),
+        saved = await _showSidePanel<bool>(
+          context,
+          _StudyMaterialBottomSheet(course: course),
         );
         break;
       case _EditCourseOption.quiz:
-        saved = await showModalBottomSheet<bool>(
-          context: context,
-          isScrollControlled: true,
-          shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-          ),
-          builder: (_) => _QuizEditorBottomSheet(course: course),
+        saved = await _showSidePanel<bool>(
+          context,
+          _QuizEditorBottomSheet(course: course),
         );
         break;
     }
@@ -92,14 +122,7 @@ class _ManageCourseScreenState extends State<ManageCourseScreen> {
   }
 
   void _showViewCourseModal(Course course) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (ctx) => _ViewCourseBottomSheet(course: course),
-    );
+    _showSidePanel(context, _ViewCourseBottomSheet(course: course));
   }
 
   @override
@@ -122,7 +145,7 @@ class _ManageCourseScreenState extends State<ManageCourseScreen> {
 
     return SafeArea(
       child: Scaffold(
-        backgroundColor: LmsAdminTheme.backgroundLight,
+        backgroundColor: const Color(0xFFF4F7FB),
         body: CustomScrollView(
           slivers: [
             SliverToBoxAdapter(
@@ -173,7 +196,8 @@ class _ManageCourseScreenState extends State<ManageCourseScreen> {
                               onTap: () {
                                 Navigator.of(context).push(
                                   MaterialPageRoute(
-                                    builder: (_) => const MentorCreateAnnouncementScreen(),
+                                    builder: (_) =>
+                                        const MentorCreateAnnouncementScreen(),
                                   ),
                                 );
                               },
@@ -182,11 +206,7 @@ class _ManageCourseScreenState extends State<ManageCourseScreen> {
                             _MentorActionIcon(
                               icon: Icons.notifications_none_rounded,
                               onTap: () {
-                                Navigator.of(context).push(
-                                  MaterialPageRoute(
-                                    builder: (_) => const MentorNotificationsScreen(),
-                                  ),
-                                );
+                                showMentorInboxSheet(context);
                               },
                             ),
                             const SizedBox(width: 8),
@@ -349,10 +369,13 @@ class _ManageCourseScreenState extends State<ManageCourseScreen> {
                   delegate: SliverChildBuilderDelegate((context, index) {
                     final course = filteredCourses[index];
                     return _CourseItemCard(
-                      course: course,
-                      onView: () => _showViewCourseModal(course),
-                      onEdit: () => _showEditCourseModal(course),
-                    );
+                          course: course,
+                          onView: () => _showViewCourseModal(course),
+                          onEdit: () => _showEditCourseModal(course),
+                        )
+                        .animate(delay: (45 * index).ms)
+                        .fadeIn(duration: 280.ms)
+                        .slideY(begin: .08, end: 0, curve: Curves.easeOutCubic);
                   }, childCount: filteredCourses.length),
                 ),
               ),
@@ -384,22 +407,22 @@ class _MentorFilterChip extends StatelessWidget {
         onTap: () => onSelected(!isSelected),
         borderRadius: BorderRadius.circular(20),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
-            color: isSelected ? const Color(0xFF3B82F6) : Colors.white,
+            color: isSelected ? const Color(0xFF111827) : Colors.white,
             border: Border.all(
               color: isSelected
-                  ? const Color(0xFF3B82F6)
+                  ? const Color(0xFF111827)
                   : const Color(0xFFE2E8F0),
               width: 1,
             ),
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(8),
             boxShadow: isSelected
                 ? [
                     BoxShadow(
-                      color: const Color(0xFF3B82F6).withOpacity(0.15),
-                      blurRadius: 4,
-                      offset: const Offset(0, 2),
+                      color: const Color(0xFF111827).withOpacity(0.14),
+                      blurRadius: 10,
+                      offset: const Offset(0, 5),
                     ),
                   ]
                 : [],
@@ -435,11 +458,11 @@ class _MentorActionIcon extends StatelessWidget {
           width: 40,
           height: 40,
           decoration: BoxDecoration(
-            color: const Color(0xFFF8FAFC),
-            border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
-            borderRadius: BorderRadius.circular(12),
+            color: Colors.white,
+            border: Border.all(color: const Color(0xFFD8E0EA), width: 1),
+            borderRadius: BorderRadius.circular(8),
           ),
-          child: Icon(icon, size: 19, color: const Color(0xFF475569)),
+          child: Icon(icon, size: 19, color: const Color(0xFF111827)),
         ),
       ),
     );
@@ -460,8 +483,19 @@ class _CourseItemCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      decoration: LmsAdminTheme.adminCardDecoration(context),
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFDCE5EF)),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF0F172A).withOpacity(0.05),
+            blurRadius: 16,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Column(
@@ -474,8 +508,8 @@ class _CourseItemCard extends StatelessWidget {
                   width: 44,
                   height: 44,
                   decoration: BoxDecoration(
-                    color: const Color(0xFFEFF6FF),
-                    borderRadius: BorderRadius.circular(12),
+                    color: const Color(0xFFE8F1FF),
+                    borderRadius: BorderRadius.circular(8),
                   ),
                   child: const Icon(
                     Icons.school_rounded,
@@ -541,6 +575,20 @@ class _CourseItemCard extends StatelessWidget {
             const SizedBox(height: 12),
             Row(
               children: [
+                _CourseMetaPill(
+                  icon: Icons.layers_outlined,
+                  text: '${course.modules.length} modules',
+                ),
+                const SizedBox(width: 8),
+                _CourseMetaPill(
+                  icon: Icons.speed_outlined,
+                  text: course.difficulty.name,
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
                 Expanded(
                   child: _MentorActionButton(
                     label: 'View',
@@ -590,11 +638,11 @@ class _MentorActionButton extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 8),
           decoration: BoxDecoration(
-            color: isPrimary ? const Color(0xFF3B82F6) : Colors.white,
+            color: isPrimary ? const Color(0xFF111827) : Colors.white,
             border: isPrimary
                 ? null
                 : Border.all(color: const Color(0xFFE2E8F0), width: 1),
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(8),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -615,6 +663,46 @@ class _MentorActionButton extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CourseMetaPill extends StatelessWidget {
+  const _CourseMetaPill({required this.icon, required this.text});
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Flexible(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF8FAFC),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: const Color(0xFFE2E8F0)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: const Color(0xFF64748B)),
+            const SizedBox(width: 5),
+            Flexible(
+              child: Text(
+                text,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.poppins(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: const Color(0xFF64748B),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -645,7 +733,8 @@ class _EditCourseOptionsSheet extends StatelessWidget {
       const _EditOptionItem(
         option: _EditCourseOption.modules,
         title: 'Add Modules',
-        description: 'Manage modules with lesson title, video link, transcript and duration.',
+        description:
+            'Manage modules with lesson title, video link, transcript and duration.',
         icon: Icons.menu_book_rounded,
         color: Color(0xFF0EA5A4),
       ),
@@ -674,18 +763,26 @@ class _EditCourseOptionsSheet extends StatelessWidget {
           children: [
             Text(
               'Edit Course Options',
-              style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.w700),
+              style: GoogleFonts.poppins(
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+              ),
             ),
             const SizedBox(height: 4),
             Text(
               course.title,
-              style: GoogleFonts.poppins(fontSize: 12, color: const Color(0xFF64748B)),
+              style: GoogleFonts.poppins(
+                fontSize: 12,
+                color: const Color(0xFF64748B),
+              ),
             ),
             const SizedBox(height: 14),
-            ...options.map((item) => Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: _EditOptionTile(item: item),
-                )),
+            ...options.map(
+              (item) => Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: _EditOptionTile(item: item),
+              ),
+            ),
             const SizedBox(height: 6),
           ],
         ),
@@ -756,7 +853,10 @@ class _EditOptionTile extends StatelessWidget {
                     const SizedBox(height: 2),
                     Text(
                       item.description,
-                      style: GoogleFonts.poppins(fontSize: 12, color: const Color(0xFF64748B)),
+                      style: GoogleFonts.poppins(
+                        fontSize: 12,
+                        color: const Color(0xFF64748B),
+                      ),
                     ),
                   ],
                 ),
@@ -776,10 +876,12 @@ class _EditCourseDetailsBottomSheet extends StatefulWidget {
   final Course course;
 
   @override
-  State<_EditCourseDetailsBottomSheet> createState() => _EditCourseDetailsBottomSheetState();
+  State<_EditCourseDetailsBottomSheet> createState() =>
+      _EditCourseDetailsBottomSheetState();
 }
 
-class _EditCourseDetailsBottomSheetState extends State<_EditCourseDetailsBottomSheet> {
+class _EditCourseDetailsBottomSheetState
+    extends State<_EditCourseDetailsBottomSheet> {
   late final TextEditingController _title;
   late final TextEditingController _duration;
   late final TextEditingController _description;
@@ -796,7 +898,9 @@ class _EditCourseDetailsBottomSheetState extends State<_EditCourseDetailsBottomS
     _description = TextEditingController(text: widget.course.description);
     _thumbnail = TextEditingController(text: widget.course.thumbnailUrl);
     _mentorName = TextEditingController(text: widget.course.instructorName);
-    _moduleType = widget.course.moduleType.isEmpty ? 'Self-paced' : widget.course.moduleType;
+    _moduleType = widget.course.moduleType.isEmpty
+        ? 'Self-paced'
+        : widget.course.moduleType;
   }
 
   @override
@@ -811,14 +915,20 @@ class _EditCourseDetailsBottomSheetState extends State<_EditCourseDetailsBottomS
 
   List<Map<String, dynamic>> _existingModulePayload() {
     return widget.course.modules
-        .map((m) => _EditableModule.fromCourseModule(m).toJson(courseId: widget.course.id))
+        .map(
+          (m) => _EditableModule.fromCourseModule(
+            m,
+          ).toJson(courseId: widget.course.id),
+        )
         .toList(growable: false);
   }
 
   Future<void> _save() async {
     if (_title.text.trim().isEmpty || _description.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Course name and description are required.')),
+        const SnackBar(
+          content: Text('Course name and description are required.'),
+        ),
       );
       return;
     }
@@ -830,7 +940,9 @@ class _EditCourseDetailsBottomSheetState extends State<_EditCourseDetailsBottomS
         duration: _duration.text.trim(),
         description: _description.text.trim(),
         thumbnailUrl: _thumbnail.text.trim(),
-        instructorName: _mentorName.text.trim().isEmpty ? 'Academy Mentor' : _mentorName.text.trim(),
+        instructorName: _mentorName.text.trim().isEmpty
+            ? 'Academy Mentor'
+            : _mentorName.text.trim(),
         moduleType: _moduleType,
         category: widget.course.category,
         difficulty: widget.course.difficulty.name,
@@ -842,9 +954,9 @@ class _EditCourseDetailsBottomSheetState extends State<_EditCourseDetailsBottomS
       Navigator.of(context).pop(true);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to update details: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to update details: $e')));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -867,33 +979,69 @@ class _EditCourseDetailsBottomSheetState extends State<_EditCourseDetailsBottomS
             children: [
               Text(
                 'Edit Details',
-                style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.w700),
+                style: GoogleFonts.poppins(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
               const SizedBox(height: 14),
               Expanded(
                 child: SingleChildScrollView(
                   child: Column(
                     children: [
-                      TextField(controller: _title, decoration: const InputDecoration(labelText: 'Course Name')),
+                      TextField(
+                        controller: _title,
+                        decoration: const InputDecoration(
+                          labelText: 'Course Name',
+                        ),
+                      ),
                       const SizedBox(height: 10),
-                      TextField(controller: _duration, decoration: const InputDecoration(labelText: 'Course Duration')),
+                      TextField(
+                        controller: _duration,
+                        decoration: const InputDecoration(
+                          labelText: 'Course Duration',
+                        ),
+                      ),
                       const SizedBox(height: 10),
-                      TextField(controller: _description, minLines: 3, maxLines: 6, decoration: const InputDecoration(labelText: 'Course Description')),
+                      TextField(
+                        controller: _description,
+                        minLines: 3,
+                        maxLines: 6,
+                        decoration: const InputDecoration(
+                          labelText: 'Course Description',
+                        ),
+                      ),
                       const SizedBox(height: 10),
-                      TextField(controller: _thumbnail, decoration: const InputDecoration(labelText: 'Course Image URL')),
+                      TextField(
+                        controller: _thumbnail,
+                        decoration: const InputDecoration(
+                          labelText: 'Course Image URL',
+                        ),
+                      ),
                       const SizedBox(height: 10),
-                      TextField(controller: _mentorName, decoration: const InputDecoration(labelText: 'Mentor Name')),
+                      TextField(
+                        controller: _mentorName,
+                        decoration: const InputDecoration(
+                          labelText: 'Mentor Name',
+                        ),
+                      ),
                       const SizedBox(height: 10),
                       DropdownButtonFormField<String>(
                         value: _moduleType,
                         items: const [
                           DropdownMenuItem(value: 'Live', child: Text('Live')),
-                          DropdownMenuItem(value: 'Self-paced', child: Text('Self-paced')),
+                          DropdownMenuItem(
+                            value: 'Self-paced',
+                            child: Text('Self-paced'),
+                          ),
                         ],
                         onChanged: (value) {
-                          if (value != null) setState(() => _moduleType = value);
+                          if (value != null)
+                            setState(() => _moduleType = value);
                         },
-                        decoration: const InputDecoration(labelText: 'Course Type'),
+                        decoration: const InputDecoration(
+                          labelText: 'Course Type',
+                        ),
                       ),
                     ],
                   ),
@@ -904,7 +1052,9 @@ class _EditCourseDetailsBottomSheetState extends State<_EditCourseDetailsBottomS
                 children: [
                   Expanded(
                     child: OutlinedButton(
-                      onPressed: _saving ? null : () => Navigator.of(context).pop(false),
+                      onPressed: _saving
+                          ? null
+                          : () => Navigator.of(context).pop(false),
                       child: const Text('Cancel'),
                     ),
                   ),
@@ -960,10 +1110,12 @@ class _EditCourseBottomSheetState extends State<_EditCourseBottomSheet> {
     _thumbnail = TextEditingController(text: widget.course.thumbnailUrl);
     _mentorName = TextEditingController(text: widget.course.instructorName);
     _category = TextEditingController(text: widget.course.category);
-    _moduleType = widget.course.moduleType.isEmpty ? 'Self-paced' : widget.course.moduleType;
+    _moduleType = widget.course.moduleType.isEmpty
+        ? 'Self-paced'
+        : widget.course.moduleType;
     _modules = widget.course.modules
-      .map((m) => _EditableModule.fromCourseModule(m))
-      .toList(growable: true);
+        .map((m) => _EditableModule.fromCourseModule(m))
+        .toList(growable: true);
   }
 
   @override
@@ -982,11 +1134,17 @@ class _EditCourseBottomSheetState extends State<_EditCourseBottomSheet> {
       text: (module?.orderIndex ?? (_modules.length + 1)).toString(),
     );
     final title = TextEditingController(text: module?.title ?? '');
-    final moduleDescription = TextEditingController(text: module?.description ?? '');
-    final coinReward = TextEditingController(text: (module?.coinReward ?? 0).toString());
-    
+    final moduleDescription = TextEditingController(
+      text: module?.description ?? '',
+    );
+    final coinReward = TextEditingController(
+      text: (module?.coinReward ?? 0).toString(),
+    );
+
     // Copy lessons to edit locally
-    List<_EditableLesson> localLessons = List<_EditableLesson>.from(module?.lessons ?? []);
+    List<_EditableLesson> localLessons = List<_EditableLesson>.from(
+      module?.lessons ?? [],
+    );
 
     final saved = await showDialog<bool>(
       context: context,
@@ -1002,35 +1160,48 @@ class _EditCourseBottomSheetState extends State<_EditCourseBottomSheet> {
                   TextField(
                     controller: orderIndex,
                     keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'Module Order Index'),
+                    decoration: const InputDecoration(
+                      labelText: 'Module Order Index',
+                    ),
                   ),
                   const SizedBox(height: 10),
                   TextField(
                     controller: title,
-                    decoration: const InputDecoration(labelText: 'Module Title'),
+                    decoration: const InputDecoration(
+                      labelText: 'Module Title',
+                    ),
                   ),
                   const SizedBox(height: 10),
                   TextField(
                     controller: moduleDescription,
                     minLines: 2,
                     maxLines: 4,
-                    decoration: const InputDecoration(labelText: 'Module Description'),
+                    decoration: const InputDecoration(
+                      labelText: 'Module Description',
+                    ),
                   ),
                   const SizedBox(height: 10),
                   TextField(
                     controller: coinReward,
                     keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'Module Reward (coins)'),
+                    decoration: const InputDecoration(
+                      labelText: 'Module Reward (coins)',
+                    ),
                   ),
                   const SizedBox(height: 20),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('Lessons', style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
+                      Text(
+                        'Lessons',
+                        style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+                      ),
                       IconButton(
                         icon: const Icon(Icons.add_circle_outline),
                         onPressed: () async {
-                          final newLesson = await _addOrEditLessonDialog(context);
+                          final newLesson = await _addOrEditLessonDialog(
+                            context,
+                          );
                           if (newLesson != null) {
                             setLocal(() => localLessons.add(newLesson));
                           }
@@ -1039,21 +1210,33 @@ class _EditCourseBottomSheetState extends State<_EditCourseBottomSheet> {
                     ],
                   ),
                   if (localLessons.isEmpty)
-                    const Text('No lessons added yet.', style: TextStyle(fontSize: 12, color: Colors.grey))
+                    const Text(
+                      'No lessons added yet.',
+                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                    )
                   else
                     ...localLessons.asMap().entries.map((entry) {
                       final lIdx = entry.key;
                       final l = entry.value;
                       return ListTile(
-                        title: Text(l.title, style: const TextStyle(fontSize: 14)),
-                        subtitle: Text(l.duration, style: const TextStyle(fontSize: 12)),
+                        title: Text(
+                          l.title,
+                          style: const TextStyle(fontSize: 14),
+                        ),
+                        subtitle: Text(
+                          l.duration,
+                          style: const TextStyle(fontSize: 12),
+                        ),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             IconButton(
                               icon: const Icon(Icons.edit_outlined, size: 18),
                               onPressed: () async {
-                                final edited = await _addOrEditLessonDialog(context, lesson: l);
+                                final edited = await _addOrEditLessonDialog(
+                                  context,
+                                  lesson: l,
+                                );
                                 if (edited != null) {
                                   setLocal(() => localLessons[lIdx] = edited);
                                 }
@@ -1061,7 +1244,8 @@ class _EditCourseBottomSheetState extends State<_EditCourseBottomSheet> {
                             ),
                             IconButton(
                               icon: const Icon(Icons.delete_outline, size: 18),
-                              onPressed: () => setLocal(() => localLessons.removeAt(lIdx)),
+                              onPressed: () =>
+                                  setLocal(() => localLessons.removeAt(lIdx)),
                             ),
                           ],
                         ),
@@ -1072,15 +1256,22 @@ class _EditCourseBottomSheetState extends State<_EditCourseBottomSheet> {
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
-            FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Save')),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Save'),
+            ),
           ],
         ),
       ),
     );
 
     if (saved == true) {
-      final parsedOrderIndex = int.tryParse(orderIndex.text.trim()) ?? (_modules.length + 1);
+      final parsedOrderIndex =
+          int.tryParse(orderIndex.text.trim()) ?? (_modules.length + 1);
       final next = _EditableModule(
         id: module?.id ?? '',
         orderIndex: parsedOrderIndex,
@@ -1088,8 +1279,12 @@ class _EditCourseBottomSheetState extends State<_EditCourseBottomSheet> {
         description: moduleDescription.text.trim(),
         lessons: localLessons,
         coinReward: int.tryParse(coinReward.text.trim()) ?? 0,
-        studyMaterials: List<_StudyMaterialDraft>.from(module?.studyMaterials ?? const []),
-        quizQuestions: List<_QuizQuestionDraft>.from(module?.quizQuestions ?? const []),
+        studyMaterials: List<_StudyMaterialDraft>.from(
+          module?.studyMaterials ?? const [],
+        ),
+        quizQuestions: List<_QuizQuestionDraft>.from(
+          module?.quizQuestions ?? const [],
+        ),
       );
       setState(() {
         if (index != null) {
@@ -1106,12 +1301,17 @@ class _EditCourseBottomSheetState extends State<_EditCourseBottomSheet> {
     coinReward.dispose();
   }
 
-  Future<_EditableLesson?> _addOrEditLessonDialog(BuildContext context, {_EditableLesson? lesson}) async {
+  Future<_EditableLesson?> _addOrEditLessonDialog(
+    BuildContext context, {
+    _EditableLesson? lesson,
+  }) async {
     final title = TextEditingController(text: lesson?.title ?? '');
     final drive = TextEditingController(text: lesson?.videoDriveLink ?? '');
     final transcript = TextEditingController(text: lesson?.transcript ?? '');
     final duration = TextEditingController(text: lesson?.duration ?? '');
-    final order = TextEditingController(text: (lesson?.orderIndex ?? 1).toString());
+    final order = TextEditingController(
+      text: (lesson?.orderIndex ?? 1).toString(),
+    );
 
     return showDialog<_EditableLesson>(
       context: context,
@@ -1121,35 +1321,64 @@ class _EditCourseBottomSheetState extends State<_EditCourseBottomSheet> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              TextField(controller: title, decoration: const InputDecoration(labelText: 'Lesson Title')),
+              TextField(
+                controller: title,
+                decoration: const InputDecoration(labelText: 'Lesson Title'),
+              ),
               const SizedBox(height: 10),
-              TextField(controller: order, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Order Index')),
+              TextField(
+                controller: order,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'Order Index'),
+              ),
               const SizedBox(height: 10),
-              TextField(controller: drive, decoration: const InputDecoration(labelText: 'Google Drive Link')),
+              TextField(
+                controller: drive,
+                decoration: const InputDecoration(
+                  labelText: 'Google Drive Link',
+                ),
+              ),
               const SizedBox(height: 10),
-              TextField(controller: duration, decoration: const InputDecoration(labelText: 'Duration (e.g. 10m)')),
+              TextField(
+                controller: duration,
+                decoration: const InputDecoration(
+                  labelText: 'Duration (e.g. 10m)',
+                ),
+              ),
               const SizedBox(height: 10),
-              TextField(controller: transcript, minLines: 2, maxLines: 4, decoration: const InputDecoration(labelText: 'Transcript')),
+              TextField(
+                controller: transcript,
+                minLines: 2,
+                maxLines: 4,
+                decoration: const InputDecoration(labelText: 'Transcript'),
+              ),
             ],
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(null), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(null),
+            child: const Text('Cancel'),
+          ),
           FilledButton(
             onPressed: () {
               final link = drive.text.trim();
               if (link.isNotEmpty && !_isValidDriveLink(link)) {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Invalid Drive link')));
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Invalid Drive link')),
+                );
                 return;
               }
-              Navigator.of(context).pop(_EditableLesson(
-                id: lesson?.id ?? '',
-                title: title.text.trim(),
-                videoDriveLink: link,
-                transcript: transcript.text.trim(),
-                duration: duration.text.trim(),
-                orderIndex: int.tryParse(order.text.trim()) ?? 1,
-              ));
+              Navigator.of(context).pop(
+                _EditableLesson(
+                  id: lesson?.id ?? '',
+                  title: title.text.trim(),
+                  videoDriveLink: link,
+                  transcript: transcript.text.trim(),
+                  duration: duration.text.trim(),
+                  orderIndex: int.tryParse(order.text.trim()) ?? 1,
+                ),
+              );
             },
             child: const Text('Save Lesson'),
           ),
@@ -1161,21 +1390,29 @@ class _EditCourseBottomSheetState extends State<_EditCourseBottomSheet> {
   Future<void> _save() async {
     if (_title.text.trim().isEmpty || _description.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Course name and description are required.')),
+        const SnackBar(
+          content: Text('Course name and description are required.'),
+        ),
       );
       return;
     }
     setState(() => _saving = true);
     try {
-      final modulePayload = _modules.map((m) => m.toJson(courseId: widget.course.id)).toList(growable: false);
+      final modulePayload = _modules
+          .map((m) => m.toJson(courseId: widget.course.id))
+          .toList(growable: false);
       await ApiService.instance.updateCourseDetails(
         widget.course.id,
         title: _title.text.trim(),
         description: _description.text.trim(),
-        category: _category.text.trim().isEmpty ? 'Development' : _category.text.trim(),
+        category: _category.text.trim().isEmpty
+            ? 'Development'
+            : _category.text.trim(),
         duration: _duration.text.trim(),
         moduleType: _moduleType,
-        instructorName: _mentorName.text.trim().isEmpty ? 'Academy Mentor' : _mentorName.text.trim(),
+        instructorName: _mentorName.text.trim().isEmpty
+            ? 'Academy Mentor'
+            : _mentorName.text.trim(),
         thumbnailUrl: _thumbnail.text.trim(),
         difficulty: widget.course.difficulty.name,
         rating: widget.course.rating,
@@ -1189,9 +1426,9 @@ class _EditCourseBottomSheetState extends State<_EditCourseBottomSheet> {
       Navigator.of(context).pop(true);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to update course: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to update course: $e')));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -1214,7 +1451,10 @@ class _EditCourseBottomSheetState extends State<_EditCourseBottomSheet> {
             children: [
               Text(
                 'Add Modules',
-                style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.w700),
+                style: GoogleFonts.poppins(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
               const SizedBox(height: 14),
               Expanded(
@@ -1224,46 +1464,64 @@ class _EditCourseBottomSheetState extends State<_EditCourseBottomSheet> {
                     children: [
                       TextField(
                         controller: _title,
-                        decoration: const InputDecoration(labelText: 'Course Name'),
+                        decoration: const InputDecoration(
+                          labelText: 'Course Name',
+                        ),
                       ),
                       const SizedBox(height: 10),
                       TextField(
                         controller: _duration,
-                        decoration: const InputDecoration(labelText: 'Course Duration'),
+                        decoration: const InputDecoration(
+                          labelText: 'Course Duration',
+                        ),
                       ),
                       const SizedBox(height: 10),
                       TextField(
                         controller: _mentorName,
-                        decoration: const InputDecoration(labelText: 'Course Mentor Name'),
+                        decoration: const InputDecoration(
+                          labelText: 'Course Mentor Name',
+                        ),
                       ),
                       const SizedBox(height: 10),
                       TextField(
                         controller: _category,
-                        decoration: const InputDecoration(labelText: 'Category'),
+                        decoration: const InputDecoration(
+                          labelText: 'Category',
+                        ),
                       ),
                       const SizedBox(height: 10),
                       TextField(
                         controller: _thumbnail,
-                        decoration: const InputDecoration(labelText: 'Course Image URL'),
+                        decoration: const InputDecoration(
+                          labelText: 'Course Image URL',
+                        ),
                       ),
                       const SizedBox(height: 10),
                       DropdownButtonFormField<String>(
                         value: _moduleType,
                         items: const [
                           DropdownMenuItem(value: 'Live', child: Text('Live')),
-                          DropdownMenuItem(value: 'Self-paced', child: Text('Self-paced')),
+                          DropdownMenuItem(
+                            value: 'Self-paced',
+                            child: Text('Self-paced'),
+                          ),
                         ],
                         onChanged: (value) {
-                          if (value != null) setState(() => _moduleType = value);
+                          if (value != null)
+                            setState(() => _moduleType = value);
                         },
-                        decoration: const InputDecoration(labelText: 'Module Type'),
+                        decoration: const InputDecoration(
+                          labelText: 'Module Type',
+                        ),
                       ),
                       const SizedBox(height: 10),
                       TextField(
                         controller: _description,
                         minLines: 3,
                         maxLines: 6,
-                        decoration: const InputDecoration(labelText: 'Course Description'),
+                        decoration: const InputDecoration(
+                          labelText: 'Course Description',
+                        ),
                       ),
                       const SizedBox(height: 16),
                       Row(
@@ -1271,7 +1529,10 @@ class _EditCourseBottomSheetState extends State<_EditCourseBottomSheet> {
                         children: [
                           Text(
                             'Modules',
-                            style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w700),
+                            style: GoogleFonts.poppins(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
                           OutlinedButton.icon(
                             onPressed: () => _addOrEditModule(),
@@ -1284,7 +1545,10 @@ class _EditCourseBottomSheetState extends State<_EditCourseBottomSheet> {
                       if (_modules.isEmpty)
                         Text(
                           'No modules yet. Add modules and lessons with Google Drive video links.',
-                          style: GoogleFonts.poppins(fontSize: 12, color: const Color(0xFF64748B)),
+                          style: GoogleFonts.poppins(
+                            fontSize: 12,
+                            color: const Color(0xFF64748B),
+                          ),
                         )
                       else
                         ReorderableListView.builder(
@@ -1315,12 +1579,16 @@ class _EditCourseBottomSheetState extends State<_EditCourseBottomSheet> {
                           itemBuilder: (context, idx) {
                             final module = _modules[idx];
                             return Container(
-                              key: ValueKey(module.id.isNotEmpty ? module.id : 'temp_$idx'),
+                              key: ValueKey(
+                                module.id.isNotEmpty ? module.id : 'temp_$idx',
+                              ),
                               margin: const EdgeInsets.only(bottom: 10),
                               padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
                                 borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: const Color(0xFFE2E8F0)),
+                                border: Border.all(
+                                  color: const Color(0xFFE2E8F0),
+                                ),
                                 color: Colors.white,
                               ),
                               child: Column(
@@ -1328,51 +1596,84 @@ class _EditCourseBottomSheetState extends State<_EditCourseBottomSheet> {
                                 children: [
                                   Row(
                                     children: [
-                                      const Icon(Icons.drag_indicator, color: Colors.grey),
+                                      const Icon(
+                                        Icons.drag_indicator,
+                                        color: Colors.grey,
+                                      ),
                                       const SizedBox(width: 8),
                                       Expanded(
                                         child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
                                           children: [
                                             Text(
                                               'Module ${idx + 1}: ${module.title}',
-                                              style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+                                              style: GoogleFonts.poppins(
+                                                fontWeight: FontWeight.w600,
+                                              ),
                                             ),
                                             if (module.description.isNotEmpty)
                                               Text(
                                                 module.description,
-                                                style: GoogleFonts.poppins(fontSize: 12, color: const Color(0xFF64748B)),
+                                                style: GoogleFonts.poppins(
+                                                  fontSize: 12,
+                                                  color: const Color(
+                                                    0xFF64748B,
+                                                  ),
+                                                ),
                                               ),
                                           ],
                                         ),
                                       ),
                                       IconButton(
-                                        onPressed: () => _addOrEditModule(module: module, index: idx),
-                                        icon: const Icon(Icons.edit_outlined, size: 18),
+                                        onPressed: () => _addOrEditModule(
+                                          module: module,
+                                          index: idx,
+                                        ),
+                                        icon: const Icon(
+                                          Icons.edit_outlined,
+                                          size: 18,
+                                        ),
                                       ),
                                       IconButton(
-                                        onPressed: () => setState(() => _modules.removeAt(idx)),
-                                        icon: const Icon(Icons.delete_outline, size: 18),
+                                        onPressed: () => setState(
+                                          () => _modules.removeAt(idx),
+                                        ),
+                                        icon: const Icon(
+                                          Icons.delete_outline,
+                                          size: 18,
+                                        ),
                                       ),
                                     ],
                                   ),
                                   if (module.lessons.isNotEmpty) ...[
                                     const Divider(),
-                                    ...module.lessons.map((l) => Padding(
-                                      padding: const EdgeInsets.only(left: 32.0, top: 4),
-                                      child: Row(
-                                        children: [
-                                          const Icon(Icons.play_circle_outline, size: 14, color: Colors.blue),
-                                          const SizedBox(width: 8),
-                                          Expanded(
-                                            child: Text(
-                                              '${l.orderIndex}. ${l.title} (${l.duration})',
-                                              style: GoogleFonts.poppins(fontSize: 12),
+                                    ...module.lessons.map(
+                                      (l) => Padding(
+                                        padding: const EdgeInsets.only(
+                                          left: 32.0,
+                                          top: 4,
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            const Icon(
+                                              Icons.play_circle_outline,
+                                              size: 14,
+                                              color: Colors.blue,
                                             ),
-                                          ),
-                                        ],
+                                            const SizedBox(width: 8),
+                                            Expanded(
+                                              child: Text(
+                                                '${l.orderIndex}. ${l.title} (${l.duration})',
+                                                style: GoogleFonts.poppins(
+                                                  fontSize: 12,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
                                       ),
-                                    )),
+                                    ),
                                   ],
                                 ],
                               ),
@@ -1388,7 +1689,9 @@ class _EditCourseBottomSheetState extends State<_EditCourseBottomSheet> {
                 children: [
                   Expanded(
                     child: OutlinedButton(
-                      onPressed: _saving ? null : () => Navigator.of(context).pop(false),
+                      onPressed: _saving
+                          ? null
+                          : () => Navigator.of(context).pop(false),
                       child: const Text('Cancel'),
                     ),
                   ),
@@ -1478,23 +1781,27 @@ class _EditableModule {
           .toList(growable: true),
       coinReward: module.coinReward,
       studyMaterials: module.studyMaterials
-          .map((m) => _StudyMaterialDraft(
-                title: m.title,
-                description: m.description,
-                driveLink: m.driveLink,
-                fileName: m.fileName,
-                fileType: m.fileType,
-              ))
+          .map(
+            (m) => _StudyMaterialDraft(
+              title: m.title,
+              description: m.description,
+              driveLink: m.driveLink,
+              fileName: m.fileName,
+              fileType: m.fileType,
+            ),
+          )
           .toList(growable: true),
       quizQuestions: module.quizQuestions
-          .map((q) => _QuizQuestionDraft(
-                question: q.question,
-                optionA: q.optionA,
-                optionB: q.optionB,
-                optionC: q.optionC,
-                optionD: q.optionD,
-                correctAnswer: q.correctAnswer,
-              ))
+          .map(
+            (q) => _QuizQuestionDraft(
+              question: q.question,
+              optionA: q.optionA,
+              optionB: q.optionB,
+              optionC: q.optionC,
+              optionD: q.optionD,
+              correctAnswer: q.correctAnswer,
+            ),
+          )
           .toList(growable: true),
     );
   }
@@ -1517,8 +1824,12 @@ class _EditableModule {
       'description': description,
       'lessons': lessons.map((l) => l.toJson()).toList(growable: false),
       'coinReward': coinReward,
-      'studyMaterials': studyMaterials.map((m) => m.toJson()).toList(growable: false),
-      'quizQuestions': quizQuestions.map((q) => q.toJson()).toList(growable: false),
+      'studyMaterials': studyMaterials
+          .map((m) => m.toJson())
+          .toList(growable: false),
+      'quizQuestions': quizQuestions
+          .map((q) => q.toJson())
+          .toList(growable: false),
     };
   }
 }
@@ -1584,7 +1895,8 @@ class _StudyMaterialBottomSheet extends StatefulWidget {
   final Course course;
 
   @override
-  State<_StudyMaterialBottomSheet> createState() => _StudyMaterialBottomSheetState();
+  State<_StudyMaterialBottomSheet> createState() =>
+      _StudyMaterialBottomSheetState();
 }
 
 class _StudyMaterialBottomSheetState extends State<_StudyMaterialBottomSheet> {
@@ -1613,20 +1925,36 @@ class _StudyMaterialBottomSheetState extends State<_StudyMaterialBottomSheet> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                TextField(controller: title, decoration: const InputDecoration(labelText: 'Title')),
+                TextField(
+                  controller: title,
+                  decoration: const InputDecoration(labelText: 'Title'),
+                ),
                 const SizedBox(height: 10),
-                TextField(controller: description, minLines: 2, maxLines: 4, decoration: const InputDecoration(labelText: 'Description')),
+                TextField(
+                  controller: description,
+                  minLines: 2,
+                  maxLines: 4,
+                  decoration: const InputDecoration(labelText: 'Description'),
+                ),
                 const SizedBox(height: 10),
                 TextField(
                   controller: driveLink,
-                  decoration: const InputDecoration(labelText: 'Drive Link (required)'),
+                  decoration: const InputDecoration(
+                    labelText: 'Drive Link (required)',
+                  ),
                 ),
               ],
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
-            FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Save')),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Save'),
+            ),
           ],
         ),
       ),
@@ -1637,7 +1965,11 @@ class _StudyMaterialBottomSheetState extends State<_StudyMaterialBottomSheet> {
       if (link.isEmpty || !_isValidDriveLink(link)) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Please add a valid Google Drive link for study material.')),
+            const SnackBar(
+              content: Text(
+                'Please add a valid Google Drive link for study material.',
+              ),
+            ),
           );
         }
         return;
@@ -1652,7 +1984,9 @@ class _StudyMaterialBottomSheetState extends State<_StudyMaterialBottomSheet> {
       );
       if (next.title.isNotEmpty) {
         setState(() {
-          final materials = List<_StudyMaterialDraft>.from(_modules[moduleIndex].studyMaterials)..add(next);
+          final materials = List<_StudyMaterialDraft>.from(
+            _modules[moduleIndex].studyMaterials,
+          )..add(next);
           final module = _modules[moduleIndex];
           _modules[moduleIndex] = _EditableModule(
             id: module.id,
@@ -1684,13 +2018,17 @@ class _StudyMaterialBottomSheetState extends State<_StudyMaterialBottomSheet> {
         difficulty: widget.course.difficulty.name,
         rating: widget.course.rating,
         price: widget.course.price,
-        modules: _modules.map((m) => m.toJson(courseId: widget.course.id)).toList(growable: false),
+        modules: _modules
+            .map((m) => m.toJson(courseId: widget.course.id))
+            .toList(growable: false),
       );
       if (!mounted) return;
       Navigator.of(context).pop(true);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to save study materials: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to save study materials: $e')),
+      );
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -1711,14 +2049,22 @@ class _StudyMaterialBottomSheetState extends State<_StudyMaterialBottomSheet> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Add Study Material', style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.w700)),
+              Text(
+                'Add Study Material',
+                style: GoogleFonts.poppins(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
               const SizedBox(height: 12),
               Expanded(
                 child: _modules.isEmpty
                     ? Center(
                         child: Text(
                           'Add modules first to attach study materials.',
-                          style: GoogleFonts.poppins(color: const Color(0xFF64748B)),
+                          style: GoogleFonts.poppins(
+                            color: const Color(0xFF64748B),
+                          ),
                         ),
                       )
                     : ListView.separated(
@@ -1730,7 +2076,9 @@ class _StudyMaterialBottomSheetState extends State<_StudyMaterialBottomSheet> {
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
                               borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: const Color(0xFFE2E8F0)),
+                              border: Border.all(
+                                color: const Color(0xFFE2E8F0),
+                              ),
                             ),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1740,7 +2088,9 @@ class _StudyMaterialBottomSheetState extends State<_StudyMaterialBottomSheet> {
                                     Expanded(
                                       child: Text(
                                         'Module ${module.orderIndex}: ${module.title}',
-                                        style: GoogleFonts.poppins(fontWeight: FontWeight.w700),
+                                        style: GoogleFonts.poppins(
+                                          fontWeight: FontWeight.w700,
+                                        ),
                                       ),
                                     ),
                                     OutlinedButton.icon(
@@ -1752,27 +2102,56 @@ class _StudyMaterialBottomSheetState extends State<_StudyMaterialBottomSheet> {
                                 ),
                                 const SizedBox(height: 6),
                                 if (module.studyMaterials.isEmpty)
-                                  Text('No materials yet', style: GoogleFonts.poppins(fontSize: 12, color: const Color(0xFF64748B)))
+                                  Text(
+                                    'No materials yet',
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 12,
+                                      color: const Color(0xFF64748B),
+                                    ),
+                                  )
                                 else
-                                  ...module.studyMaterials.asMap().entries.map((entry) {
+                                  ...module.studyMaterials.asMap().entries.map((
+                                    entry,
+                                  ) {
                                     final mIndex = entry.key;
                                     final material = entry.value;
                                     return ListTile(
                                       contentPadding: EdgeInsets.zero,
                                       dense: true,
-                                      leading: const Icon(Icons.attach_file, size: 18),
-                                      title: Text(material.title, style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600)),
+                                      leading: const Icon(
+                                        Icons.attach_file,
+                                        size: 18,
+                                      ),
+                                      title: Text(
+                                        material.title,
+                                        style: GoogleFonts.poppins(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
                                       subtitle: Text(
-                                        material.driveLink.isNotEmpty ? material.driveLink : (material.fileName.isEmpty ? 'No link/file' : material.fileName),
-                                        style: GoogleFonts.poppins(fontSize: 11),
+                                        material.driveLink.isNotEmpty
+                                            ? material.driveLink
+                                            : (material.fileName.isEmpty
+                                                  ? 'No link/file'
+                                                  : material.fileName),
+                                        style: GoogleFonts.poppins(
+                                          fontSize: 11,
+                                        ),
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                       ),
                                       trailing: IconButton(
-                                        icon: const Icon(Icons.delete_outline, size: 18),
+                                        icon: const Icon(
+                                          Icons.delete_outline,
+                                          size: 18,
+                                        ),
                                         onPressed: () {
                                           setState(() {
-                                            final next = List<_StudyMaterialDraft>.from(module.studyMaterials)..removeAt(mIndex);
+                                            final next =
+                                                List<_StudyMaterialDraft>.from(
+                                                  module.studyMaterials,
+                                                )..removeAt(mIndex);
                                             _modules[index] = _EditableModule(
                                               id: module.id,
                                               orderIndex: module.orderIndex,
@@ -1781,7 +2160,8 @@ class _StudyMaterialBottomSheetState extends State<_StudyMaterialBottomSheet> {
                                               lessons: module.lessons,
                                               coinReward: module.coinReward,
                                               studyMaterials: next,
-                                              quizQuestions: module.quizQuestions,
+                                              quizQuestions:
+                                                  module.quizQuestions,
                                             );
                                           });
                                         },
@@ -1797,9 +2177,21 @@ class _StudyMaterialBottomSheetState extends State<_StudyMaterialBottomSheet> {
               const SizedBox(height: 10),
               Row(
                 children: [
-                  Expanded(child: OutlinedButton(onPressed: _saving ? null : () => Navigator.of(context).pop(false), child: const Text('Cancel'))),
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: _saving
+                          ? null
+                          : () => Navigator.of(context).pop(false),
+                      child: const Text('Cancel'),
+                    ),
+                  ),
                   const SizedBox(width: 10),
-                  Expanded(child: FilledButton(onPressed: _saving ? null : _save, child: const Text('Save Materials'))),
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: _saving ? null : _save,
+                      child: const Text('Save Materials'),
+                    ),
+                  ),
                 ],
               ),
             ],
@@ -1826,13 +2218,16 @@ class _QuizEditorBottomSheetState extends State<_QuizEditorBottomSheet> {
   @override
   void initState() {
     super.initState();
-    _modules = widget.course.modules.map((m) => _EditableModule.fromCourseModule(m)).toList(growable: true);
+    _modules = widget.course.modules
+        .map((m) => _EditableModule.fromCourseModule(m))
+        .toList(growable: true);
   }
 
-  int get _totalQuestions => _modules.fold(0, (sum, m) => sum + m.quizQuestions.length);
+  int get _totalQuestions =>
+      _modules.fold(0, (sum, m) => sum + m.quizQuestions.length);
 
   int get _minimumRequiredQuestions {
-    return 20;
+    return 10;
   }
 
   Future<void> _addQuestion(int moduleIndex) async {
@@ -1852,23 +2247,50 @@ class _QuizEditorBottomSheetState extends State<_QuizEditorBottomSheet> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                TextField(controller: question, decoration: const InputDecoration(labelText: 'Question')),
+                TextField(
+                  controller: question,
+                  decoration: const InputDecoration(labelText: 'Question'),
+                ),
                 const SizedBox(height: 8),
-                TextField(controller: optionA, decoration: const InputDecoration(labelText: 'Option A')),
+                TextField(
+                  controller: optionA,
+                  decoration: const InputDecoration(labelText: 'Option A'),
+                ),
                 const SizedBox(height: 8),
-                TextField(controller: optionB, decoration: const InputDecoration(labelText: 'Option B')),
+                TextField(
+                  controller: optionB,
+                  decoration: const InputDecoration(labelText: 'Option B'),
+                ),
                 const SizedBox(height: 8),
-                TextField(controller: optionC, decoration: const InputDecoration(labelText: 'Option C')),
+                TextField(
+                  controller: optionC,
+                  decoration: const InputDecoration(labelText: 'Option C'),
+                ),
                 const SizedBox(height: 8),
-                TextField(controller: optionD, decoration: const InputDecoration(labelText: 'Option D')),
+                TextField(
+                  controller: optionD,
+                  decoration: const InputDecoration(labelText: 'Option D'),
+                ),
                 const SizedBox(height: 8),
                 DropdownButtonFormField<String>(
                   value: correctAnswer,
                   items: const [
-                    DropdownMenuItem(value: 'A', child: Text('Correct: Option A')),
-                    DropdownMenuItem(value: 'B', child: Text('Correct: Option B')),
-                    DropdownMenuItem(value: 'C', child: Text('Correct: Option C')),
-                    DropdownMenuItem(value: 'D', child: Text('Correct: Option D')),
+                    DropdownMenuItem(
+                      value: 'A',
+                      child: Text('Correct: Option A'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'B',
+                      child: Text('Correct: Option B'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'C',
+                      child: Text('Correct: Option C'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'D',
+                      child: Text('Correct: Option D'),
+                    ),
                   ],
                   onChanged: (value) {
                     if (value != null) setLocal(() => correctAnswer = value);
@@ -1878,8 +2300,14 @@ class _QuizEditorBottomSheetState extends State<_QuizEditorBottomSheet> {
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
-            FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Save')),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Save'),
+            ),
           ],
         ),
       ),
@@ -1894,10 +2322,16 @@ class _QuizEditorBottomSheetState extends State<_QuizEditorBottomSheet> {
         optionD: optionD.text.trim(),
         correctAnswer: correctAnswer,
       );
-      if (q.question.isNotEmpty && q.optionA.isNotEmpty && q.optionB.isNotEmpty && q.optionC.isNotEmpty && q.optionD.isNotEmpty) {
+      if (q.question.isNotEmpty &&
+          q.optionA.isNotEmpty &&
+          q.optionB.isNotEmpty &&
+          q.optionC.isNotEmpty &&
+          q.optionD.isNotEmpty) {
         setState(() {
           final module = _modules[moduleIndex];
-          final nextQuestions = List<_QuizQuestionDraft>.from(module.quizQuestions)..add(q);
+          final nextQuestions = List<_QuizQuestionDraft>.from(
+            module.quizQuestions,
+          )..add(q);
           _modules[moduleIndex] = _EditableModule(
             id: module.id,
             orderIndex: module.orderIndex,
@@ -1917,7 +2351,11 @@ class _QuizEditorBottomSheetState extends State<_QuizEditorBottomSheet> {
     final minimum = _minimumRequiredQuestions;
     if (_totalQuestions < minimum) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Add at least $minimum questions for ${_modules.length} modules.')),
+        SnackBar(
+          content: Text(
+            'Add at least $minimum questions for ${_modules.length} modules.',
+          ),
+        ),
       );
       return;
     }
@@ -1936,13 +2374,17 @@ class _QuizEditorBottomSheetState extends State<_QuizEditorBottomSheet> {
         difficulty: widget.course.difficulty.name,
         rating: widget.course.rating,
         price: widget.course.price,
-        modules: _modules.map((m) => m.toJson(courseId: widget.course.id)).toList(growable: false),
+        modules: _modules
+            .map((m) => m.toJson(courseId: widget.course.id))
+            .toList(growable: false),
       );
       if (!mounted) return;
       Navigator.of(context).pop(true);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to save quiz: $e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to save quiz: $e')));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -1963,11 +2405,20 @@ class _QuizEditorBottomSheetState extends State<_QuizEditorBottomSheet> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Add Quiz', style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.w700)),
+              Text(
+                'Add Quiz',
+                style: GoogleFonts.poppins(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
               const SizedBox(height: 4),
               Text(
                 'Minimum required: $_minimumRequiredQuestions questions for ${_modules.length} modules',
-                style: GoogleFonts.poppins(fontSize: 12, color: const Color(0xFF64748B)),
+                style: GoogleFonts.poppins(
+                  fontSize: 12,
+                  color: const Color(0xFF64748B),
+                ),
               ),
               const SizedBox(height: 10),
               Expanded(
@@ -1975,7 +2426,9 @@ class _QuizEditorBottomSheetState extends State<_QuizEditorBottomSheet> {
                     ? Center(
                         child: Text(
                           'Add modules first to create quiz questions.',
-                          style: GoogleFonts.poppins(color: const Color(0xFF64748B)),
+                          style: GoogleFonts.poppins(
+                            color: const Color(0xFF64748B),
+                          ),
                         ),
                       )
                     : ListView.separated(
@@ -1987,7 +2440,9 @@ class _QuizEditorBottomSheetState extends State<_QuizEditorBottomSheet> {
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
                               borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: const Color(0xFFE2E8F0)),
+                              border: Border.all(
+                                color: const Color(0xFFE2E8F0),
+                              ),
                             ),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1997,7 +2452,9 @@ class _QuizEditorBottomSheetState extends State<_QuizEditorBottomSheet> {
                                     Expanded(
                                       child: Text(
                                         'Module ${module.orderIndex}: ${module.title}',
-                                        style: GoogleFonts.poppins(fontWeight: FontWeight.w700),
+                                        style: GoogleFonts.poppins(
+                                          fontWeight: FontWeight.w700,
+                                        ),
                                       ),
                                     ),
                                     OutlinedButton.icon(
@@ -2010,27 +2467,47 @@ class _QuizEditorBottomSheetState extends State<_QuizEditorBottomSheet> {
                                 const SizedBox(height: 6),
                                 Text(
                                   '${module.quizQuestions.length} question(s)',
-                                  style: GoogleFonts.poppins(fontSize: 12, color: const Color(0xFF64748B)),
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 12,
+                                    color: const Color(0xFF64748B),
+                                  ),
                                 ),
-                                ...module.quizQuestions.asMap().entries.map((entry) {
+                                ...module.quizQuestions.asMap().entries.map((
+                                  entry,
+                                ) {
                                   final qIndex = entry.key;
                                   final q = entry.value;
                                   return ListTile(
                                     contentPadding: EdgeInsets.zero,
                                     dense: true,
-                                    leading: const Icon(Icons.help_outline, size: 18),
+                                    leading: const Icon(
+                                      Icons.help_outline,
+                                      size: 18,
+                                    ),
                                     title: Text(
                                       q.question,
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
-                                      style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600),
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                      ),
                                     ),
-                                    subtitle: Text('Correct: ${q.correctAnswer}', style: GoogleFonts.poppins(fontSize: 11)),
+                                    subtitle: Text(
+                                      'Correct: ${q.correctAnswer}',
+                                      style: GoogleFonts.poppins(fontSize: 11),
+                                    ),
                                     trailing: IconButton(
-                                      icon: const Icon(Icons.delete_outline, size: 18),
+                                      icon: const Icon(
+                                        Icons.delete_outline,
+                                        size: 18,
+                                      ),
                                       onPressed: () {
                                         setState(() {
-                                          final nextQuestions = List<_QuizQuestionDraft>.from(module.quizQuestions)..removeAt(qIndex);
+                                          final nextQuestions =
+                                              List<_QuizQuestionDraft>.from(
+                                                module.quizQuestions,
+                                              )..removeAt(qIndex);
                                           _modules[index] = _EditableModule(
                                             id: module.id,
                                             orderIndex: module.orderIndex,
@@ -2038,7 +2515,8 @@ class _QuizEditorBottomSheetState extends State<_QuizEditorBottomSheet> {
                                             description: module.description,
                                             lessons: module.lessons,
                                             coinReward: module.coinReward,
-                                            studyMaterials: module.studyMaterials,
+                                            studyMaterials:
+                                                module.studyMaterials,
                                             quizQuestions: nextQuestions,
                                           );
                                         });
@@ -2055,9 +2533,21 @@ class _QuizEditorBottomSheetState extends State<_QuizEditorBottomSheet> {
               const SizedBox(height: 10),
               Row(
                 children: [
-                  Expanded(child: OutlinedButton(onPressed: _saving ? null : () => Navigator.of(context).pop(false), child: const Text('Cancel'))),
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: _saving
+                          ? null
+                          : () => Navigator.of(context).pop(false),
+                      child: const Text('Cancel'),
+                    ),
+                  ),
                   const SizedBox(width: 10),
-                  Expanded(child: FilledButton(onPressed: _saving ? null : _save, child: Text('Save Quiz ($_totalQuestions)'))),
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: _saving ? null : _save,
+                      child: Text('Save Quiz ($_totalQuestions)'),
+                    ),
+                  ),
                 ],
               ),
             ],

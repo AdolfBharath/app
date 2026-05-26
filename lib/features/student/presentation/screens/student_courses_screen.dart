@@ -1,11 +1,14 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
-import '../../../../config/theme.dart';
 import '../../../../models/course.dart';
 import '../../../../screens/course_detail_screen.dart';
+import '../../../../providers/auth_provider.dart';
+import '../../../../utils/course_cta.dart';
+import '../../../../widgets/course_cta_button.dart';
 import '../providers/student_nav_provider.dart';
 import '../providers/student_provider.dart';
 import '../widgets/student_header_row.dart';
@@ -49,8 +52,10 @@ class StudentCoursesScreen extends StatelessWidget {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text('My Courses',
-                                  style: theme.textTheme.titleLarge),
+                              Text(
+                                'My Courses',
+                                style: theme.textTheme.titleLarge,
+                              ),
                               const SizedBox(height: 2),
                               Text(
                                 'Keep track of your learning progress',
@@ -65,9 +70,8 @@ class StudentCoursesScreen extends StatelessWidget {
                         ),
                         // Stats pill
                         Consumer<StudentProvider>(
-                          builder: (_, student, __) => _StatsPill(
-                            count: student.enrolledCourses.length,
-                          ),
+                          builder: (context, student, child) =>
+                              _StatsPill(count: student.enrolledCourses.length),
                         ),
                       ],
                     ),
@@ -85,7 +89,9 @@ class StudentCoursesScreen extends StatelessWidget {
                               indicatorSize: TabBarIndicatorSize.tab,
                               dividerColor: Colors.transparent,
                               labelColor: scheme.primary,
-                              unselectedLabelColor: scheme.onSurface.withAlpha(140),
+                              unselectedLabelColor: scheme.onSurface.withAlpha(
+                                140,
+                              ),
                               indicator: BoxDecoration(
                                 color: scheme.primary.withValues(alpha: 0.12),
                                 borderRadius: BorderRadius.circular(20),
@@ -111,11 +117,17 @@ class StudentCoursesScreen extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: 12),
-                        Icon(Icons.format_list_bulleted_rounded,
-                            color: scheme.onSurface.withAlpha(140), size: 24),
+                        Icon(
+                          Icons.format_list_bulleted_rounded,
+                          color: scheme.onSurface.withAlpha(140),
+                          size: 24,
+                        ),
                         const SizedBox(width: 8),
-                        Icon(Icons.grid_view_rounded,
-                            color: scheme.primary, size: 24),
+                        Icon(
+                          Icons.grid_view_rounded,
+                          color: scheme.primary,
+                          size: 24,
+                        ),
                       ],
                     ),
                   ],
@@ -131,7 +143,7 @@ class StudentCoursesScreen extends StatelessWidget {
                     final enrolled = student.enrolledCourses;
                     final ongoing = enrolled.where((c) {
                       final p = student.getCourseProgress(c.id);
-                      return p > 0.01 && p < 1.0;
+                      return p < 1.0;
                     }).toList();
                     final completed = enrolled.where((c) {
                       final p = student.getCourseProgress(c.id);
@@ -140,9 +152,9 @@ class StudentCoursesScreen extends StatelessWidget {
 
                     return TabBarView(
                       children: [
-                        _CoursesList(courses: enrolled),
                         _CoursesList(courses: ongoing),
                         _CoursesList(courses: completed, completed: true),
+                        const _CoursesList(courses: [], archived: true),
                       ],
                     );
                   },
@@ -167,10 +179,15 @@ class StudentCoursesScreen extends StatelessWidget {
 
 // ─── Courses list ─────────────────────────────────────────────────────────────
 class _CoursesList extends StatelessWidget {
-  const _CoursesList({required this.courses, this.completed = false});
+  const _CoursesList({
+    required this.courses,
+    this.completed = false,
+    this.archived = false,
+  });
 
   final List courses;
   final bool completed;
+  final bool archived;
 
   @override
   Widget build(BuildContext context) {
@@ -181,13 +198,17 @@ class _CoursesList extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              completed ? Icons.emoji_events_outlined : Icons.school_outlined,
+              archived
+                  ? Icons.archive_outlined
+                  : completed
+                  ? Icons.emoji_events_outlined
+                  : Icons.school_outlined,
               size: 48,
               color: scheme.onSurface.withAlpha(80),
             ),
             const SizedBox(height: 12),
             Text(
-              'No courses here yet',
+              archived ? 'No archived courses' : 'No courses here yet',
               style: GoogleFonts.poppins(
                 fontWeight: FontWeight.w600,
                 color: scheme.onSurface.withAlpha(160),
@@ -201,12 +222,12 @@ class _CoursesList extends StatelessWidget {
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
       itemCount: courses.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 12),
+      separatorBuilder: (context, index) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
         final course = courses[index];
         final student = context.watch<StudentProvider>();
         final progress = student.getCourseProgress(course.id);
-        
+
         return _CourseCard(course: course, progress: progress)
             .animate(delay: Duration(milliseconds: index * 60))
             .fadeIn(duration: 280.ms)
@@ -233,6 +254,7 @@ class _CourseCardState extends State<_CourseCard> {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final isCompleted = widget.progress >= 1.0;
+    final auth = context.read<AuthProvider>();
 
     final student = context.watch<StudentProvider>();
     final completedKeys = student.getCompletedLessons(widget.course.id);
@@ -255,6 +277,30 @@ class _CourseCardState extends State<_CourseCard> {
       }
     }
 
+    final progressRatio = totalLessons > 0
+        ? (completedCount / totalLessons)
+        : 0.0;
+    final cta = resolveCourseCta(
+      isLoggedIn: auth.isLoggedIn,
+      isStudent: true,
+      isEnrolled: true,
+      price: widget.course.price,
+      progress: progressRatio,
+    );
+
+    IconData ctaIcon;
+    switch (cta.state) {
+      case CourseCtaState.review:
+        ctaIcon = Icons.check_circle_rounded;
+        break;
+      case CourseCtaState.continueLearning:
+      case CourseCtaState.start:
+        ctaIcon = Icons.play_arrow_rounded;
+        break;
+      default:
+        ctaIcon = Icons.play_arrow_rounded;
+    }
+
     return AnimatedScale(
       duration: const Duration(milliseconds: 120),
       scale: _pressed ? 0.98 : 1.0,
@@ -265,10 +311,7 @@ class _CourseCardState extends State<_CourseCard> {
         onTap: () {
           Navigator.of(context).pushNamed(
             CourseDetailScreen.routeName,
-            arguments: {
-              'courseId': widget.course.id,
-              'targetLessonKey': null,
-            },
+            arguments: {'courseId': widget.course.id, 'targetLessonKey': null},
           );
         },
         child: Container(
@@ -290,69 +333,49 @@ class _CourseCardState extends State<_CourseCard> {
               Stack(
                 children: [
                   ClipRRect(
-                    borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                    borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(20),
+                    ),
                     child: widget.course.thumbnailUrl.isNotEmpty
-                        ? Image.network(
-                            widget.course.thumbnailUrl,
+                        ? CachedNetworkImage(
+                            imageUrl: widget.course.thumbnailUrl,
                             width: double.infinity,
                             height: 140,
                             fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => _Placeholder(
-                                size: double.infinity, height: 140, color: scheme.primary),
+                            errorWidget: (context, error, stackTrace) =>
+                                _Placeholder(
+                                  size: double.infinity,
+                                  height: 140,
+                                  color: scheme.primary,
+                                ),
                           )
                         : _Placeholder(
-                            size: double.infinity, height: 140, color: scheme.primary),
+                            size: double.infinity,
+                            height: 140,
+                            color: scheme.primary,
+                          ),
                   ),
                   Positioned(
                     right: 12,
                     bottom: -16,
-                    child: GestureDetector(
-                      onTap: () {
+                    child: CourseCtaButton(
+                      label: cta.label,
+                      icon: ctaIcon,
+                      isCompact: true,
+                      onPressed: () {
                         Navigator.of(context).pushNamed(
                           CourseDetailScreen.routeName,
                           arguments: {
                             'courseId': widget.course.id,
-                            'targetLessonKey': nextLesson != null && nextModuleOrderIndex != null
+                            'targetLessonKey':
+                                nextLesson != null &&
+                                    nextModuleOrderIndex != null &&
+                                    cta.state != CourseCtaState.review
                                 ? '$nextModuleOrderIndex:${nextLesson.title.trim()}'
                                 : null,
                           },
                         );
                       },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: scheme.primary,
-                          borderRadius: BorderRadius.circular(20),
-                          boxShadow: [
-                            BoxShadow(
-                              color: scheme.primary.withValues(alpha: 0.35),
-                              blurRadius: 8,
-                              offset: const Offset(0, 4),
-                            )
-                          ],
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              isCompleted
-                                  ? Icons.check_circle_rounded
-                                  : Icons.play_arrow_rounded,
-                              color: Colors.white,
-                              size: 16,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              isCompleted ? 'Completed' : 'Continue',
-                              style: GoogleFonts.inter(
-                                color: Colors.white,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
                     ),
                   ),
                 ],
@@ -377,21 +400,26 @@ class _CourseCardState extends State<_CourseCard> {
                     const SizedBox(height: 8),
                     Row(
                       children: [
-                        Icon(Icons.menu_book_rounded,
-                            size: 14,
-                            color: scheme.onSurface.withAlpha(160)),
+                        Icon(
+                          Icons.menu_book_rounded,
+                          size: 14,
+                          color: scheme.onSurface.withAlpha(160),
+                        ),
                         const SizedBox(width: 4),
                         Text(
                           'Lesson $completedCount/$totalLessons',
                           style: GoogleFonts.inter(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                              color: scheme.onSurface.withAlpha(160)),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: scheme.onSurface.withAlpha(160),
+                          ),
                         ),
                         const SizedBox(width: 16),
-                        Icon(Icons.schedule_outlined,
-                            size: 14,
-                            color: scheme.onSurface.withAlpha(160)),
+                        Icon(
+                          Icons.schedule_outlined,
+                          size: 14,
+                          color: scheme.onSurface.withAlpha(160),
+                        ),
                         const SizedBox(width: 4),
                         Text(
                           widget.course.duration.isNotEmpty
@@ -412,10 +440,13 @@ class _CourseCardState extends State<_CourseCard> {
                           child: ClipRRect(
                             borderRadius: BorderRadius.circular(6),
                             child: LinearProgressIndicator(
-                              value: totalLessons > 0 ? completedCount / totalLessons : 0.0,
+                              value: totalLessons > 0
+                                  ? completedCount / totalLessons
+                                  : 0.0,
                               minHeight: 6,
-                              backgroundColor:
-                                  scheme.onSurface.withValues(alpha: 0.1),
+                              backgroundColor: scheme.onSurface.withValues(
+                                alpha: 0.1,
+                              ),
                               valueColor: AlwaysStoppedAnimation<Color>(
                                 isCompleted
                                     ? const Color(0xFF10B981)
@@ -464,13 +495,14 @@ class _Placeholder extends StatelessWidget {
         color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(14),
       ),
-      child: Icon(Icons.play_circle_outline_rounded,
-          color: color.withValues(alpha: 0.5),
-          size: (height ?? size) * 0.45),
+      child: Icon(
+        Icons.play_circle_outline_rounded,
+        color: color.withValues(alpha: 0.5),
+        size: (height ?? size) * 0.45,
+      ),
     );
   }
 }
-
 
 // ─── Stats pill ───────────────────────────────────────────────────────────────
 class _StatsPill extends StatelessWidget {
@@ -534,7 +566,9 @@ class _ExploreBanner extends StatelessWidget {
                 Text(
                   'Ready for more?',
                   style: GoogleFonts.poppins(
-                      fontSize: 13, fontWeight: FontWeight.w700),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
                 const SizedBox(height: 2),
                 Text(
@@ -553,12 +587,14 @@ class _ExploreBanner extends StatelessWidget {
             onPressed: onExplore,
             style: FilledButton.styleFrom(
               backgroundColor: scheme.primary,
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
-              textStyle:
-                  GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w700),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              textStyle: GoogleFonts.poppins(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
             ),
             child: const Text('Explore'),
           ),

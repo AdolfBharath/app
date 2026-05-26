@@ -137,6 +137,7 @@ class Course {
   final bool createdByAdmin;
   final int quizCoinReward;
   final int quizPassScore;
+  final String googleFormUrl;
   final String? mentorId;
 
   const Course({
@@ -158,6 +159,7 @@ class Course {
     this.createdByAdmin = false,
     this.quizCoinReward = 0,
     this.quizPassScore = 0,
+    this.googleFormUrl = '',
     this.mentorId,
   });
 
@@ -180,6 +182,7 @@ class Course {
     bool? createdByAdmin,
     int? quizCoinReward,
     int? quizPassScore,
+    String? googleFormUrl,
     String? mentorId,
   }) {
     return Course(
@@ -201,6 +204,7 @@ class Course {
       createdByAdmin: createdByAdmin ?? this.createdByAdmin,
       quizCoinReward: quizCoinReward ?? this.quizCoinReward,
       quizPassScore: quizPassScore ?? this.quizPassScore,
+      googleFormUrl: googleFormUrl ?? this.googleFormUrl,
       mentorId: mentorId ?? this.mentorId,
     );
   }

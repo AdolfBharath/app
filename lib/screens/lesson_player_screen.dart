@@ -42,6 +42,7 @@ class LessonPlayerScreen extends StatefulWidget {
 class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
   late final dynamic _controller; // WebViewController on mobile
   bool _loading = true;
+  bool _hasError = false;
   late final String _viewId;
 
   @override
@@ -54,18 +55,75 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
       WebHelper.registerVideoIframe(_viewId, widget.videoUrl);
       _loading = false;
     } else {
-      // Initialize WebView for Mobile
+      // Initialize WebView for Mobile — load the Drive preview URL inside
+      // a local HTML page so the iframe embedding is allowed.
       _controller = WebViewController()
         ..setJavaScriptMode(JavaScriptMode.unrestricted)
+        ..setUserAgent(
+            'Mozilla/5.0 (Linux; Android 10; SM-G973F) AppleWebKit/537.36 '
+            '(KHTML, like Gecko) Chrome/113.0.0.0 Mobile Safari/537.36')
         ..setNavigationDelegate(
           NavigationDelegate(
             onPageFinished: (_) {
               if (!mounted) return;
-              setState(() => _loading = false);
+              setState(() {
+                _loading = false;
+                _hasError = false;
+              });
+            },
+            onWebResourceError: (error) {
+              if (!mounted) return;
+              // Only flag a full error for main frame failures; sub-resource
+              // errors on the Drive preview page are common and benign.
+              if (error.isForMainFrame == true) {
+                setState(() {
+                  _loading = false;
+                  _hasError = true;
+                });
+              }
             },
           ),
         )
-        ..loadRequest(Uri.parse(widget.videoUrl));
+        ..loadHtmlString(_buildEmbedHtml(widget.videoUrl));
+    }
+  }
+
+  /// Wraps [videoUrl] (a Google Drive /preview URL) inside a minimal full-page
+  /// HTML document so the WebView treats it as a local page and the embedded
+  /// iframe is served from the same origin, bypassing Drive's X-Frame-Options.
+  String _buildEmbedHtml(String videoUrl) {
+    return '''<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no"/>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    html, body { width:100%; height:100%; background:#000; overflow:hidden; }
+    iframe { width:100%; height:100%; border:none; display:block; }
+  </style>
+</head>
+<body>
+  <iframe
+    src="$videoUrl"
+    allow="autoplay; encrypted-media; fullscreen"
+    allowfullscreen
+    frameborder="0">
+  </iframe>
+</body>
+</html>''';
+  }
+
+  void _retryLoad() {
+    if (!kIsWeb) {
+      (_controller as WebViewController)
+          .loadHtmlString(_buildEmbedHtml(widget.videoUrl));
+      if (mounted) {
+        setState(() {
+          _loading = true;
+          _hasError = false;
+        });
+      }
     }
   }
 
@@ -90,6 +148,8 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
               children: [
                 if (kIsWeb)
                   HtmlElementView(viewType: _viewId)
+                else if (_hasError)
+                  _buildErrorFallback()
                 else
                   WebViewWidget(controller: _controller as WebViewController),
                 if (_loading && !kIsWeb)
@@ -134,6 +194,52 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
             ),
           _buildBottomActionArea(context),
         ],
+      ),
+    );
+  }
+
+  Widget _buildErrorFallback() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.play_circle_outline_rounded,
+                size: 64, color: Color(0xFF94A3B8)),
+            const SizedBox(height: 16),
+            Text(
+              'Video could not be loaded',
+              style: GoogleFonts.poppins(
+                fontWeight: FontWeight.w700,
+                fontSize: 16,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Make sure the Google Drive video is shared as\n'
+              '"Anyone with the link → Viewer".',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.poppins(
+                fontSize: 13,
+                color: const Color(0xFF64748B),
+              ),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton.icon(
+              onPressed: _retryLoad,
+              icon: const Icon(Icons.refresh_rounded),
+              label: const Text('Retry'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: LmsAdminTheme.primaryBlue,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

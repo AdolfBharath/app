@@ -35,14 +35,18 @@ class _ManageCourseScreenState extends State<ManageCourseScreen> {
     return Provider.of<CourseProvider>(context, listen: false).loadCourses();
   }
 
-  Future<void> _deleteCourse(Course course) async {
+  Future<void> _deleteCourse(Course course, {int? enrollmentCount}) async {
     if (_isDeleting) return;
     setState(() {
       _isDeleting = true;
     });
 
     try {
-      await ApiService.instance.deleteCourse(course.id);
+      await ApiService.instance.deleteCourse(
+        course.id,
+        courseTitle: course.title,
+        enrollmentCount: enrollmentCount,
+      );
       await _loadCourses();
 
       if (!mounted) return;
@@ -70,6 +74,59 @@ class _ManageCourseScreenState extends State<ManageCourseScreen> {
           _isDeleting = false;
         });
       }
+    }
+  }
+
+  Future<void> _confirmDeleteCourse(Course course) async {
+    if (_isDeleting) return;
+
+    int enrollmentCount = 0;
+    try {
+      enrollmentCount = await ApiService.instance
+          .getCourseEnrollmentCount(course.id);
+    } catch (_) {
+      enrollmentCount = 0;
+    }
+
+    if (!mounted) return;
+
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        final hasEnrollments = enrollmentCount > 0;
+        final enrollmentLabel =
+            enrollmentCount == 1 ? '1 enrolled user' : '$enrollmentCount enrolled users';
+        return AlertDialog(
+          title: Text(
+            'Delete course?',
+            style: GoogleFonts.poppins(fontWeight: FontWeight.w700),
+          ),
+          content: Text(
+            hasEnrollments
+                ? 'This course has $enrollmentLabel. Deleting it will remove enrollments and progress, and students will be notified.'
+                : 'This will permanently delete the course.',
+            style: GoogleFonts.poppins(fontSize: 13),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: Text('No', style: GoogleFonts.poppins()),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFEF4444),
+                foregroundColor: Colors.white,
+              ),
+              child: Text('Yes, delete', style: GoogleFonts.poppins()),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed == true) {
+      await _deleteCourse(course, enrollmentCount: enrollmentCount);
     }
   }
 
@@ -173,6 +230,7 @@ class _ManageCourseScreenState extends State<ManageCourseScreen> {
                   builder: (context, snapshot) {
                     if (snapshot.connectionState == ConnectionState.waiting) {
                       return ListView.separated(
+                        padding: const EdgeInsets.only(bottom: 96),
                         itemCount: 4,
                         separatorBuilder: (_, __) => const SizedBox(height: 12),
                         itemBuilder: (_, __) {
@@ -204,13 +262,14 @@ class _ManageCourseScreenState extends State<ManageCourseScreen> {
                     }
 
                     return ListView.separated(
+                      padding: const EdgeInsets.only(bottom: 96),
                       itemCount: courses.length,
                       separatorBuilder: (_, _) => const SizedBox(height: 12),
                       itemBuilder: (context, index) {
                         final course = courses[index];
                         return CourseCard(
                           course: course,
-                          onDelete: () => _deleteCourse(course),
+                          onDelete: () => _confirmDeleteCourse(course),
                           onView: () {
                             showDialog<void>(
                               context: context,
@@ -311,18 +370,19 @@ class _CourseAssignmentsDialogState extends State<_CourseAssignmentsDialog> {
       setState(() {
         _students = students;
         _mentors = mentors;
+        final courseIdStr = widget.course.id.toString();
         _selectedStudentIds
           ..clear()
           ..addAll(
             students
-                .where((u) => u.courseIds.contains(widget.course.id))
+                .where((u) => u.courseIds.map((c) => c.toString()).contains(courseIdStr))
                 .map((u) => u.id),
           );
         _selectedMentorIds
           ..clear()
           ..addAll(
             mentors
-                .where((u) => u.courseIds.contains(widget.course.id))
+                .where((u) => u.courseIds.map((c) => c.toString()).contains(courseIdStr))
                 .map((u) => u.id),
           );
         _loadingUsers = false;
@@ -348,7 +408,8 @@ class _CourseAssignmentsDialogState extends State<_CourseAssignmentsDialog> {
       ) async {
         var changed = false;
         for (final user in users) {
-          final next = user.courseIds.toSet();
+          final current = user.courseIds.toSet();
+          final next = current.toSet();
           final shouldContain = selectedIds.contains(user.id);
           if (shouldContain) {
             next.add(widget.course.id);
@@ -356,16 +417,17 @@ class _CourseAssignmentsDialogState extends State<_CourseAssignmentsDialog> {
             next.remove(widget.course.id);
           }
 
-          if (next.length == user.courseIds.toSet().length &&
-              next.containsAll(user.courseIds)) {
+          if (next.length == current.length && next.containsAll(current)) {
             continue;
           }
 
           changed = true;
-          await ApiService.instance.updateUser(
+          final added = next.difference(current).toList(growable: false);
+          final removed = current.difference(next).toList(growable: false);
+          await ApiService.instance.updateUserCourseAssignments(
             user.id,
-            courseIds: next.toList(growable: false),
-            includeCourseIds: true,
+            addCourseIds: added,
+            removeCourseIds: removed,
           );
         }
 

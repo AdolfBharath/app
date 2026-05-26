@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../models/task.dart';
 import '../models/task_submission.dart';
 import '../services/api_service.dart';
+import 'package:my_app/utils/ui_utils.dart';
 
 class BatchTasksScreen extends StatefulWidget {
   const BatchTasksScreen({
@@ -46,221 +47,14 @@ class _BatchTasksScreenState extends State<BatchTasksScreen> {
       if (!mounted) return;
       setState(() {
         _tasks = tasks;
+        _loading = false;
       });
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to load tasks: $e')),
-      );
-    } finally {
-      if (mounted) {
-        setState(() => _loading = false);
-      }
+      setState(() => _loading = false);
+      showTopNotification(context, 'Failed to load tasks: $e');
     }
-  }
-
-  Future<void> _openTaskEditor({BatchTask? existing}) async {
-    final title = TextEditingController(text: existing?.title ?? '');
-    final description = TextEditingController(text: existing?.description ?? '');
-    final fileUrl = TextEditingController(text: existing?.fileUrl ?? '');
-    final driveLink = TextEditingController(text: existing?.driveLink ?? '');
-    DateTime? deadline;
-    if (existing?.deadline != null) {
-      final d = existing!.deadline!;
-      deadline = DateTime(d.year, d.month, d.day, 23, 59, 59);
-    }
-    bool saving = false;
-    final messenger = ScaffoldMessenger.of(context);
-
-    try {
-      await showDialog<void>(
-        context: context,
-        builder: (dialogContext) {
-          return StatefulBuilder(
-            builder: (context, setDialogState) {
-            Future<void> save() async {
-              final t = title.text.trim();
-              if (t.isEmpty) {
-                messenger.showSnackBar(
-                  const SnackBar(content: Text('Title is required')),
-                );
-                return;
-              }
-
-              setDialogState(() => saving = true);
-              var closedDialog = false;
-              try {
-                if (existing == null) {
-                  await ApiService.instance.createTask(
-                    batchId: widget.batchId,
-                    title: t,
-                    description: description.text.trim(),
-                    fileUrl: fileUrl.text.trim().isEmpty ? null : fileUrl.text.trim(),
-                    driveLink: driveLink.text.trim().isEmpty ? null : driveLink.text.trim(),
-                    deadline: deadline,
-                  );
-                } else {
-                  await ApiService.instance.updateTask(
-                    taskId: existing.id,
-                    batchId: widget.batchId,
-                    title: t,
-                    description: description.text.trim(),
-                    fileUrl: fileUrl.text.trim().isEmpty ? null : fileUrl.text.trim(),
-                    driveLink: driveLink.text.trim().isEmpty ? null : driveLink.text.trim(),
-                    deadline: deadline,
-                  );
-                }
-                if (!mounted) return;
-                closedDialog = true;
-                if (Navigator.of(dialogContext).canPop()) {
-                  Navigator.of(dialogContext).pop();
-                }
-                await _load();
-              } catch (e) {
-                if (!mounted) return;
-                messenger.showSnackBar(
-                  SnackBar(content: Text('Failed to save task: $e')),
-                );
-              } finally {
-                if (mounted && !closedDialog && dialogContext.mounted) {
-                  try {
-                    setDialogState(() => saving = false);
-                  } catch (_) {}
-                }
-              }
-            }
-
-            return AlertDialog(
-              title: Text(existing == null ? 'Create Task' : 'Edit Task'),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextField(
-                      controller: title,
-                      decoration: const InputDecoration(labelText: 'Title'),
-                    ),
-                    const SizedBox(height: 10),
-                    TextField(
-                      controller: description,
-                      minLines: 3,
-                      maxLines: 5,
-                      decoration: const InputDecoration(labelText: 'Description / Question'),
-                    ),
-                    const SizedBox(height: 10),
-                    TextField(
-                      controller: fileUrl,
-                      decoration: const InputDecoration(labelText: 'File URL (optional)'),
-                    ),
-                    const SizedBox(height: 10),
-                    TextField(
-                      controller: driveLink,
-                      decoration: const InputDecoration(labelText: 'Submission Drive Link (optional)'),
-                    ),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: () async {
-                              final picked = await showDatePicker(
-                                context: dialogContext,
-                                initialDate: DateTime.now().add(const Duration(days: 1)),
-                                firstDate: DateTime.now().subtract(const Duration(days: 1)),
-                                lastDate: DateTime.now().add(const Duration(days: 3650)),
-                              );
-                              if (picked == null) return;
-                              setDialogState(() {
-                                deadline = DateTime(picked.year, picked.month, picked.day, 23, 59, 59);
-                              });
-                            },
-                            icon: const Icon(Icons.event_outlined),
-                            label: Text(
-                              deadline == null
-                                  ? 'Deadline'
-                                  : '${deadline!.day}/${deadline!.month}/${deadline!.year}',
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: saving ? null : () => Navigator.of(dialogContext).pop(),
-                  child: const Text('Cancel'),
-                ),
-                FilledButton(
-                  onPressed: saving ? null : save,
-                  child: saving
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : Text(existing == null ? 'Create' : 'Save'),
-                ),
-              ],
-            );
-            },
-          );
-        },
-      );
-    } finally {
-      title.dispose();
-      description.dispose();
-      fileUrl.dispose();
-      driveLink.dispose();
-    }
-  }
-
-  Future<void> _openMentorSubmissionLink(BatchTask task) async {
-    final messenger = ScaffoldMessenger.of(context);
-    final raw = (task.driveLink ?? '').trim();
-    final uri = Uri.tryParse(raw);
-    final valid = raw.isNotEmpty && uri != null && (uri.scheme == 'http' || uri.scheme == 'https');
-    if (!valid) {
-      messenger.showSnackBar(
-        const SnackBar(content: Text('Submission link not available. Contact mentor.')),
-      );
-      return;
-    }
-
-    if (!mounted) return;
-    setState(() => _openingTaskIds.add(task.id));
-
-    try {
-      final opened = await launchUrl(uri, mode: LaunchMode.platformDefault);
-      if (!opened) {
-        messenger.showSnackBar(
-          const SnackBar(content: Text('Unable to open submission link.')),
-        );
-        return;
-      }
-
-      // Optional enhancement: mark that student attempted/opened submission link.
-      try {
-        await ApiService.instance.submitTask(
-          taskId: task.id,
-          driveLink: raw,
-          fileType: 'link',
-          markDone: false,
-        );
-      } catch (_) {
-        // Best effort only.
-      }
-
-      messenger.showSnackBar(
-        const SnackBar(content: Text('Submission link opened.')),
-      );
-      await _load();
-    } finally {
-      if (mounted) {
-        setState(() => _openingTaskIds.remove(task.id));
-      }
-    }
+    // Completed task list load.
   }
 
   Future<void> _markTaskDone(BatchTask task) async {
@@ -289,6 +83,218 @@ class _BatchTasksScreenState extends State<BatchTasksScreen> {
     } finally {
       if (mounted) {
         setState(() => _markingDoneTaskIds.remove(task.id));
+      }
+    }
+  }
+
+  Future<void> _openTaskEditor({BatchTask? existing}) async {
+    final titleCtrl = TextEditingController(text: existing?.title ?? '');
+    final descCtrl = TextEditingController(text: existing?.description ?? '');
+    final driveLinkCtrl = TextEditingController(text: existing?.driveLink ?? '');
+    DateTime? deadline = existing?.deadline;
+    bool saving = false;
+    final messenger = ScaffoldMessenger.of(context);
+
+    try {
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogCtx) => StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            Future<void> pickDeadline() async {
+              final picked = await showDatePicker(
+                context: ctx,
+                initialDate: deadline ?? DateTime.now().add(const Duration(days: 7)),
+                firstDate: DateTime.now(),
+                lastDate: DateTime.now().add(const Duration(days: 365)),
+              );
+              if (picked != null) setDialogState(() => deadline = picked);
+            }
+
+            Future<void> save() async {
+              final title = titleCtrl.text.trim();
+              final desc = descCtrl.text.trim();
+              if (title.isEmpty) {
+                messenger.showSnackBar(
+                  const SnackBar(content: Text('Task title is required.')),
+                );
+                return;
+              }
+              if (desc.isEmpty) {
+                messenger.showSnackBar(
+                  const SnackBar(content: Text('Task description is required.')),
+                );
+                return;
+              }
+
+              setDialogState(() => saving = true);
+              bool closed = false;
+              try {
+                if (existing == null) {
+                  await ApiService.instance.createTask(
+                    batchId: widget.batchId,
+                    title: title,
+                    description: desc,
+                    driveLink: driveLinkCtrl.text.trim().isEmpty
+                        ? null
+                        : driveLinkCtrl.text.trim(),
+                    deadline: deadline,
+                  );
+                } else {
+                  await ApiService.instance.updateTask(
+                    taskId: existing.id,
+                    batchId: widget.batchId,
+                    title: title,
+                    description: desc,
+                    driveLink: driveLinkCtrl.text.trim().isEmpty
+                        ? null
+                        : driveLinkCtrl.text.trim(),
+                    deadline: deadline,
+                  );
+                }
+                if (!mounted) return;
+                closed = true;
+                if (Navigator.of(dialogCtx).canPop()) {
+                  Navigator.of(dialogCtx).pop();
+                }
+                messenger.showSnackBar(
+                  SnackBar(
+                    content: Text(existing == null
+                        ? 'Task created successfully.'
+                        : 'Task updated successfully.'),
+                  ),
+                );
+                await _load();
+              } catch (e) {
+                if (!mounted) return;
+                messenger.showSnackBar(
+                  SnackBar(content: Text('Failed to save task: $e')),
+                );
+              } finally {
+                if (mounted && !closed && dialogCtx.mounted) {
+                  try {
+                    setDialogState(() => saving = false);
+                  } catch (_) {}
+                }
+              }
+            }
+
+            return AlertDialog(
+              title: Text(
+                existing == null ? 'Create Task' : 'Edit Task',
+                style: GoogleFonts.poppins(fontWeight: FontWeight.w700),
+              ),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      TextField(
+                        controller: titleCtrl,
+                        enabled: !saving,
+                        decoration: InputDecoration(
+                          labelText: 'Task Title *',
+                          labelStyle: GoogleFonts.poppins(fontSize: 13),
+                          border: const OutlineInputBorder(),
+                        ),
+                        style: GoogleFonts.poppins(),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: descCtrl,
+                        enabled: !saving,
+                        minLines: 3,
+                        maxLines: 6,
+                        decoration: InputDecoration(
+                          labelText: 'Description *',
+                          labelStyle: GoogleFonts.poppins(fontSize: 13),
+                          border: const OutlineInputBorder(),
+                        ),
+                        style: GoogleFonts.poppins(),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: driveLinkCtrl,
+                        enabled: !saving,
+                        decoration: InputDecoration(
+                          labelText: 'Submission Link (Google Drive / Form)',
+                          labelStyle: GoogleFonts.poppins(fontSize: 13),
+                          hintText: 'https://...',
+                          border: const OutlineInputBorder(),
+                        ),
+                        style: GoogleFonts.poppins(fontSize: 13),
+                        keyboardType: TextInputType.url,
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              deadline == null
+                                  ? 'No deadline set'
+                                  : 'Deadline: ${deadline!.day}/${deadline!.month}/${deadline!.year}',
+                              style: GoogleFonts.poppins(fontSize: 13),
+                            ),
+                          ),
+                          TextButton.icon(
+                            onPressed: saving ? null : pickDeadline,
+                            icon: const Icon(Icons.calendar_today_rounded, size: 16),
+                            label: Text(
+                              deadline == null ? 'Set Deadline' : 'Change',
+                              style: GoogleFonts.poppins(fontSize: 12),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: saving ? null : () => Navigator.of(dialogCtx).pop(),
+                  child: Text('Cancel', style: GoogleFonts.poppins()),
+                ),
+                FilledButton(
+                  onPressed: saving ? null : save,
+                  child: saving
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white),
+                        )
+                      : Text(
+                          existing == null ? 'Create' : 'Save',
+                          style: GoogleFonts.poppins(fontWeight: FontWeight.w700),
+                        ),
+                ),
+              ],
+            );
+          },
+        ),
+      );
+    } finally {
+      titleCtrl.dispose();
+      descCtrl.dispose();
+      driveLinkCtrl.dispose();
+    }
+  }
+
+  Future<void> _openMentorSubmissionLink(BatchTask task) async {
+    final link = (task.driveLink ?? '').trim();
+    if (link.isEmpty) return;
+    final uri = Uri.tryParse(link);
+    if (uri == null || (uri.scheme != 'http' && uri.scheme != 'https')) return;
+
+    setState(() => _openingTaskIds.add(task.id));
+    try {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } finally {
+      if (mounted) {
+        setState(() => _openingTaskIds.remove(task.id));
       }
     }
   }
@@ -390,7 +396,7 @@ class _BatchTasksScreenState extends State<BatchTasksScreen> {
                     else if (submissions.isEmpty)
                       Expanded(
                         child: Center(
-                          child: Text('No submissions yet', style: GoogleFonts.poppins()),
+                          child: Text('No submissions yet'),
                         ),
                       )
                     else
@@ -652,8 +658,8 @@ class _BatchTasksScreenState extends State<BatchTasksScreen> {
       floatingActionButton: widget.canCreate
           ? FloatingActionButton.extended(
               onPressed: () => _openTaskEditor(),
-              icon: const Icon(Icons.add),
-              label: const Text('Create Task'),
+              icon: const Icon(Icons.add_task_rounded),
+              label: const Text('New Project Task'),
             )
           : null,
       body: _loading
@@ -821,7 +827,7 @@ class _BatchTasksScreenState extends State<BatchTasksScreen> {
                                   const SizedBox(width: 8),
                                   Expanded(
                                     child: OutlinedButton.icon(
-                                      onPressed: (!hasAttemptedSubmission || isMarkedDone || markingDone)
+                                      onPressed: (isMarkedDone || markingDone)
                                           ? null
                                           : () => _markTaskDone(task),
                                       icon: markingDone
@@ -853,7 +859,7 @@ class _BatchTasksScreenState extends State<BatchTasksScreen> {
                             if (widget.canSubmit && !hasAttemptedSubmission) ...[
                               const SizedBox(height: 6),
                               Text(
-                                'Open submission link first, then mark as done after uploading.',
+                                'Open the submission link, upload your work, then mark this task as done.',
                                 style: GoogleFonts.poppins(
                                   fontSize: 11,
                                   color: const Color(0xFF6B7280),
@@ -888,8 +894,8 @@ class _InlineResourceActions extends StatelessWidget {
   final String value;
   final String label;
 
-  bool get _isHttp {
-    final uri = Uri.tryParse(value);
+  bool _isValidHttpUrl(String v) {
+    final uri = Uri.tryParse(v);
     return uri != null && (uri.scheme == 'http' || uri.scheme == 'https');
   }
 
@@ -899,28 +905,24 @@ class _InlineResourceActions extends StatelessWidget {
       spacing: 8,
       children: [
         OutlinedButton.icon(
-          onPressed: () async {
-            await Clipboard.setData(ClipboardData(text: value));
-            if (!context.mounted) return;
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('$label copied')),
-            );
-          },
-          icon: const Icon(Icons.copy_outlined, size: 16),
-          label: const Text('Copy'),
+          onPressed: _isValidHttpUrl(value)
+              ? () async {
+                  final uri = Uri.parse(value);
+                  final launched = await launchUrl(
+                    uri,
+                    mode: LaunchMode.externalApplication,
+                  );
+                  if (!context.mounted) return;
+                  if (launched) return;
+                  await Clipboard.setData(ClipboardData(text: value));
+                  if (context.mounted) {
+                    showTopNotification(context, '$label copied');
+                  }
+                }
+              : null,
+          icon: const Icon(Icons.open_in_new, size: 16),
+          label: const Text('Open'),
         ),
-        if (_isHttp)
-          OutlinedButton.icon(
-            onPressed: () async {
-              await Clipboard.setData(ClipboardData(text: value));
-              if (!context.mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('URL copied. Open it in browser.')),
-              );
-            },
-            icon: const Icon(Icons.open_in_new, size: 16),
-            label: const Text('Open'),
-          ),
       ],
     );
   }

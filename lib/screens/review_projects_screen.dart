@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 import '../models/project.dart';
+import '../models/task_submission.dart';
+import '../providers/batch_provider.dart';
 import '../services/api_service.dart';
+import '../services/task_service.dart';
 import 'project_status_badge.dart';
 import 'project_details_screen.dart';
 
@@ -35,8 +39,30 @@ class _ReviewProjectsScreenState extends State<ReviewProjectsScreen> {
 
     try {
       final projects = await ApiService.instance.getProjects();
+
+      // Fetch Task Submissions
+      final batchProvider = context.read<BatchProvider>();
+      final batchIds = batchProvider.batches.map((b) => b.id).toList();
+      final taskSubs = await TaskService.instance.getAllMentorSubmissions(batchIds);
+
+      // Convert TaskSubmissions to Project objects for the UI
+      final taskProjects = taskSubs.map((sub) {
+        return Project(
+          id: sub.id,
+          title: '[TASK] ${sub.title ?? "Submission"}',
+          description: 'Task Submission for Task ID: ${sub.taskId}',
+          studentId: sub.studentId,
+          studentName: sub.studentName ?? 'Unknown Student',
+          batchId: '', // We don't have batchId easily here without more lookups
+          batchName: 'Batch Task',
+          submissionDate: sub.submittedAt,
+          status: _mapStatus(sub.status),
+          fileUrls: sub.fileUrl != null ? [sub.fileUrl!] : [],
+        );
+      }).toList();
+
       setState(() {
-        _projects = projects;
+        _projects = [...projects, ...taskProjects];
         _isLoading = false;
       });
     } catch (e) {
@@ -44,6 +70,20 @@ class _ReviewProjectsScreenState extends State<ReviewProjectsScreen> {
         _errorMessage = e.toString();
         _isLoading = false;
       });
+    }
+  }
+
+  ProjectStatus _mapStatus(String status) {
+    switch (status.toLowerCase()) {
+      case 'validated':
+      case 'reviewed':
+        return ProjectStatus.reviewed;
+      case 'rejected':
+        return ProjectStatus.rejected;
+      case 'in_review':
+        return ProjectStatus.inReview;
+      default:
+        return ProjectStatus.pending;
     }
   }
 

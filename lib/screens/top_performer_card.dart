@@ -123,7 +123,7 @@ class TopPerformerCard extends StatelessWidget {
                                 ),
                                 const SizedBox(width: 4),
                                 Text(
-                                  '${performance.progress.toStringAsFixed(0)}%',
+                                  '${(performance.progress * 100).toStringAsFixed(0)}%',
                                   style: const TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.w600,
@@ -153,7 +153,7 @@ class TopPerformerCard extends StatelessWidget {
                                 ),
                                 const SizedBox(width: 4),
                                 Text(
-                                  performance.score.toStringAsFixed(1),
+                                  'Best ${performance.score.toStringAsFixed(0)}',
                                   style: const TextStyle(
                                     fontSize: 11,
                                     fontWeight: FontWeight.w600,
@@ -167,9 +167,9 @@ class TopPerformerCard extends StatelessWidget {
                         ],
                       ),
                       const SizedBox(height: 6),
-                      // Assignments completed
+                      // Course completion
                       Text(
-                        '${performance.completedAssignments}/${performance.totalAssignments} assignments completed',
+                        '${performance.completedAssignments}/${performance.totalAssignments} lessons completed',
                         style: const TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w500,

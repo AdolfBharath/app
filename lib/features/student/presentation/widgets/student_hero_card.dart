@@ -14,6 +14,8 @@ class StudentHeroCard extends StatelessWidget {
     required this.streakDays,
     required this.gender,
     this.profileImageBytes,
+    this.profilePic,
+    this.profilePicUrl,
     this.subtitle,
     this.onTap,
     this.footer,
@@ -24,6 +26,8 @@ class StudentHeroCard extends StatelessWidget {
   final int streakDays;
   final String gender;
   final Uint8List? profileImageBytes;
+  final String? profilePic;
+  final String? profilePicUrl;
   final String? subtitle;
   final VoidCallback? onTap;
   final Widget? footer;
@@ -87,8 +91,8 @@ class StudentHeroCard extends StatelessWidget {
                           letterSpacing: -0.5,
                         ),
                       ),
-                      if (subtitle != null) ...[
-                        const SizedBox(height: 2),
+                      if (subtitle != null) const SizedBox(height: 2),
+                      if (subtitle != null)
                         Text(
                           subtitle!,
                           maxLines: 2,
@@ -99,7 +103,6 @@ class StudentHeroCard extends StatelessWidget {
                             color: Colors.white.withValues(alpha: 0.8),
                           ),
                         ),
-                      ],
                     ],
                   ),
                 ),
@@ -133,10 +136,8 @@ class StudentHeroCard extends StatelessWidget {
           ),
           
           // ── Bottom tracker (embedded directly, no box) ────────────────────
-          if (footer != null) ...[
-            footer!,
-            const SizedBox(height: 20),
-          ],
+          if (footer != null) footer!,
+          if (footer != null) const SizedBox(height: 20),
         ],
       ),
     );

@@ -139,54 +139,62 @@ class _QuestionCard extends StatelessWidget {
                   question.description,
                   style: GoogleFonts.poppins(fontSize: 14),
                 ),
-                if (isReplied) ...[
-                  const SizedBox(height: 20),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF0FDF4),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: const Color(0xFFDCFCE7)),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            const Icon(Icons.auto_awesome, size: 14, color: Color(0xFF16A34A)),
-                            const SizedBox(width: 6),
-                            Text(
-                              'Mentor Reply',
-                              style: GoogleFonts.poppins(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                                color: const Color(0xFF16A34A),
-                              ),
+                isReplied
+                    ? Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const SizedBox(height: 20),
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF0FDF4),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: const Color(0xFFDCFCE7)),
                             ),
-                          ],
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          question.reply ?? 'No reply content.',
-                          style: GoogleFonts.poppins(
-                            fontSize: 14,
-                            color: const Color(0xFF14532D),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    const Icon(Icons.auto_awesome, size: 14, color: Color(0xFF16A34A)),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      'Mentor Reply',
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w700,
+                                        color: const Color(0xFF16A34A),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  question.reply ?? 'No reply content.',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 14,
+                                    color: const Color(0xFF14532D),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ] else ...[
-                  const SizedBox(height: 16),
-                  Text(
-                    'Waiting for mentor response...',
-                    style: GoogleFonts.poppins(
-                      fontSize: 12,
-                      fontStyle: FontStyle.italic,
-                      color: const Color(0xFF94A3B8),
-                    ),
-                  ),
-                ],
+                        ],
+                      )
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const SizedBox(height: 16),
+                          Text(
+                            'Waiting for mentor response...',
+                            style: GoogleFonts.poppins(
+                              fontSize: 12,
+                              fontStyle: FontStyle.italic,
+                              color: const Color(0xFF94A3B8),
+                            ),
+                          ),
+                        ],
+                      ),
               ],
             ),
           ),

@@ -51,17 +51,19 @@ class ApiService {
   Future<bool> changeAdminPassword({
     required String currentPassword,
     required String newPassword,
-  }) =>
-      AuthService.instance.changeAdminPassword(
-        currentPassword: currentPassword,
-        newPassword: newPassword,
-      );
+  }) => AuthService.instance.changeAdminPassword(
+    currentPassword: currentPassword,
+    newPassword: newPassword,
+  );
 
   // ---------------------------------------------------------------------------
   // Courses
   // ---------------------------------------------------------------------------
 
   Future<List<Course>> getCourses() => CourseService.instance.getCourses();
+
+  Future<Course?> getCourseById(String courseId) =>
+      CourseService.instance.getCourseById(courseId);
 
   Future<List<Course>> getMentorCourses() =>
       CourseService.instance.getMentorCourses();
@@ -76,32 +78,42 @@ class ApiService {
     String? duration,
     String? thumbnailUrl,
     String? mentorId,
+    String? instructorName,
+    String? googleFormUrl,
+    String? difficulty,
+    double? rating,
     double price = 0.0,
     bool isFeatured = false,
     bool isMyCourse = false,
-  }) =>
-      CourseService.instance.createCourse(
-        title,
-        description,
-        category: category,
-        duration: duration,
-        thumbnailUrl: thumbnailUrl,
-        mentorId: mentorId,
-        price: price,
-        isFeatured: isFeatured,
-        isMyCourse: isMyCourse,
-      );
+    int quizCoinReward = 0,
+    int quizPassScore = 0,
+  }) => CourseService.instance.createCourse(
+    title,
+    description,
+    category: category,
+    duration: duration,
+    thumbnailUrl: thumbnailUrl,
+    mentorId: mentorId,
+    instructorName: instructorName,
+    googleFormUrl: googleFormUrl,
+    difficulty: difficulty,
+    rating: rating,
+    price: price,
+    isFeatured: isFeatured,
+    isMyCourse: isMyCourse,
+    quizCoinReward: quizCoinReward,
+    quizPassScore: quizPassScore,
+  );
 
   Future<bool> updateCourseFlags(
     String id, {
     bool? isFeatured,
     bool? isMyCourse,
-  }) =>
-      CourseService.instance.updateCourseFlags(
-        id,
-        isFeatured: isFeatured,
-        isMyCourse: isMyCourse,
-      );
+  }) => CourseService.instance.updateCourseFlags(
+    id,
+    isFeatured: isFeatured,
+    isMyCourse: isMyCourse,
+  );
 
   Future<bool> updateCourseDetails(
     String id, {
@@ -119,26 +131,38 @@ class ApiService {
     String? mentorId,
     int quizCoinReward = 0,
     int quizPassScore = 0,
-  }) =>
-      CourseService.instance.updateCourseDetails(
-        id,
-        title: title,
-        description: description,
-        category: category,
-        duration: duration,
-        moduleType: moduleType,
-        instructorName: instructorName,
-        thumbnailUrl: thumbnailUrl,
-        difficulty: difficulty,
-        rating: rating,
-        modules: modules,
-        price: price,
-        mentorId: mentorId,
-        quizCoinReward: quizCoinReward,
-        quizPassScore: quizPassScore,
-      );
+    String googleFormUrl = '',
+  }) => CourseService.instance.updateCourseDetails(
+    id,
+    title: title,
+    description: description,
+    category: category,
+    duration: duration,
+    moduleType: moduleType,
+    instructorName: instructorName,
+    thumbnailUrl: thumbnailUrl,
+    difficulty: difficulty,
+    rating: rating,
+    modules: modules,
+    price: price,
+    mentorId: mentorId,
+    quizCoinReward: quizCoinReward,
+    quizPassScore: quizPassScore,
+    googleFormUrl: googleFormUrl,
+  );
 
-  Future<bool> deleteCourse(String id) => CourseService.instance.deleteCourse(id);
+  Future<int> getCourseEnrollmentCount(String courseId) =>
+      CourseService.instance.getCourseEnrollmentCount(courseId);
+
+  Future<bool> deleteCourse(
+    String id, {
+    String? courseTitle,
+    int? enrollmentCount,
+  }) => CourseService.instance.deleteCourse(
+    id,
+    courseTitle: courseTitle,
+    enrollmentCount: enrollmentCount,
+  );
 
   Future<Map<String, dynamic>> getCourseProgress(String courseId) =>
       CourseService.instance.getCourseProgress(courseId);
@@ -147,23 +171,50 @@ class ApiService {
     required String courseId,
     required int moduleNumber,
     required String lessonKey,
-  }) =>
-      CourseService.instance.completeLesson(
-        courseId: courseId,
-        moduleNumber: moduleNumber,
-        lessonKey: lessonKey,
-      );
+    List<String> moduleLessonKeys = const [],
+    int totalLessonCount = 0,
+  }) => CourseService.instance.completeLesson(
+    courseId: courseId,
+    moduleNumber: moduleNumber,
+    lessonKey: lessonKey,
+    moduleLessonKeys: moduleLessonKeys,
+    totalLessonCount: totalLessonCount,
+  );
 
   Future<Map<String, dynamic>> completeQuiz({
     required String courseId,
     required int score,
     required int total,
-  }) =>
-      CourseService.instance.completeQuiz(
-        courseId: courseId,
-        score: score,
-        total: total,
-      );
+    required int passScore,
+    String? moduleId,
+    int? moduleOrder,
+    String? moduleTitle,
+  }) => CourseService.instance.completeQuiz(
+    courseId: courseId,
+    score: score,
+    total: total,
+    passScore: passScore,
+    moduleId: moduleId,
+    moduleOrder: moduleOrder,
+    moduleTitle: moduleTitle,
+  );
+
+  Future<Map<String, dynamic>> unlockQuizAfterRewatch({
+    required String courseId,
+    String? moduleId,
+    int? moduleOrder,
+  }) => CourseService.instance.unlockQuizAfterRewatch(
+    courseId: courseId,
+    moduleId: moduleId,
+    moduleOrder: moduleOrder,
+  );
+
+  Future<Map<String, dynamic>> getStudentQuizSummary(String studentId) =>
+      CourseService.instance.getStudentQuizSummary(studentId);
+
+  Future<Map<String, dynamic>> getStudentCourseProgressSummary(
+    String studentId,
+  ) => CourseService.instance.getStudentCourseProgressSummary(studentId);
 
   Future<void> enrollInCourse(String courseId) =>
       CourseService.instance.enrollInCourse(courseId);
@@ -180,10 +231,7 @@ class ApiService {
   Future<BatchDetail> getBatchDetails(String batchId) =>
       BatchService.instance.getBatchDetails(batchId);
 
-  Future<List<AppUser>> getTopPerformers(
-    String batchId, {
-    int limit = 10,
-  }) =>
+  Future<List<AppUser>> getTopPerformers(String batchId, {int limit = 10}) =>
       BatchService.instance.getTopPerformers(batchId, limit: limit);
 
   Future<bool> createBatch({
@@ -194,16 +242,15 @@ class ApiService {
     int? enrollLimit,
     bool smartWaitlist = false,
     DateTime? startDate,
-  }) =>
-      BatchService.instance.createBatch(
-        name: name,
-        courseId: courseId,
-        mentorId: mentorId,
-        capacity: capacity,
-        enrollLimit: enrollLimit,
-        smartWaitlist: smartWaitlist,
-        startDate: startDate,
-      );
+  }) => BatchService.instance.createBatch(
+    name: name,
+    courseId: courseId,
+    mentorId: mentorId,
+    capacity: capacity,
+    enrollLimit: enrollLimit,
+    smartWaitlist: smartWaitlist,
+    startDate: startDate,
+  );
 
   Future<bool> updateBatch({
     required String batchId,
@@ -215,18 +262,17 @@ class ApiService {
     bool? smartWaitlist,
     DateTime? startDate,
     DateTime? endDate,
-  }) =>
-      BatchService.instance.updateBatch(
-        batchId: batchId,
-        name: name,
-        courseId: courseId,
-        mentorId: mentorId,
-        capacity: capacity,
-        enrollLimit: enrollLimit,
-        smartWaitlist: smartWaitlist,
-        startDate: startDate,
-        endDate: endDate,
-      );
+  }) => BatchService.instance.updateBatch(
+    batchId: batchId,
+    name: name,
+    courseId: courseId,
+    mentorId: mentorId,
+    capacity: capacity,
+    enrollLimit: enrollLimit,
+    smartWaitlist: smartWaitlist,
+    startDate: startDate,
+    endDate: endDate,
+  );
 
   Future<bool> deleteBatch(String id) => BatchService.instance.deleteBatch(id);
 
@@ -234,37 +280,45 @@ class ApiService {
   // Shop
   // ---------------------------------------------------------------------------
 
-  Future<List<ShopItem>> fetchShopItems() => ShopService.instance.fetchShopItems();
+  Future<List<ShopItem>> fetchShopItems() =>
+      ShopService.instance.fetchShopItems();
 
   Future<ShopItem> createShopItem({
     required String name,
     required int price,
     required String imageUrl,
-  }) =>
-      ShopService.instance.createShopItem(
-        name: name,
-        price: price,
-        imageUrl: imageUrl,
-      );
+  }) => ShopService.instance.createShopItem(
+    name: name,
+    price: price,
+    imageUrl: imageUrl,
+  );
 
   Future<ShopItem> updateShopItem({
     required String itemId,
     String? name,
     int? price,
     String? imageUrl,
-  }) =>
-      ShopService.instance.updateShopItem(
-        itemId: itemId,
-        name: name,
-        price: price,
-        imageUrl: imageUrl,
-      );
+  }) => ShopService.instance.updateShopItem(
+    itemId: itemId,
+    name: name,
+    price: price,
+    imageUrl: imageUrl,
+  );
 
   Future<void> deleteShopItem(String itemId) =>
       ShopService.instance.deleteShopItem(itemId);
 
-  Future<int> purchaseShopItem(String itemId) =>
-      ShopService.instance.purchaseItem(itemId);
+  Future<int> purchaseShopItem({
+    required String userId,
+    required String itemId,
+    required int itemPrice,
+    required int currentCoins,
+  }) => ShopService.instance.purchaseItem(
+    userId: userId,
+    itemId: itemId,
+    itemPrice: itemPrice,
+    currentCoins: currentCoins,
+  );
 
   // ---------------------------------------------------------------------------
   // Users
@@ -273,8 +327,11 @@ class ApiService {
   Future<List<Map<String, dynamic>>> getUsers({String? role}) =>
       UserService.instance.getUsers(role: role);
 
-    Future<List<Map<String, dynamic>>> getStudentsForCourse(String courseId) =>
+  Future<List<Map<String, dynamic>>> getStudentsForCourse(String courseId) =>
       UserService.instance.getStudentsForCourse(courseId);
+
+  Future<List<String>> getUserCourseIds(String userId) =>
+      UserService.instance.getUserCourseIds(userId);
 
   Future<Map<String, dynamic>> createUser({
     required String name,
@@ -285,17 +342,16 @@ class ApiService {
     String? senderEmail,
     String? senderPassword,
     List<String>? courseNames,
-  }) =>
-      UserService.instance.createUser(
-        name: name,
-        email: email,
-        password: password,
-        role: role,
-        phone: phone,
-        senderEmail: senderEmail,
-        senderPassword: senderPassword,
-        courseNames: courseNames,
-      );
+  }) => UserService.instance.createUser(
+    name: name,
+    email: email,
+    password: password,
+    role: role,
+    phone: phone,
+    senderEmail: senderEmail,
+    senderPassword: senderPassword,
+    courseNames: courseNames,
+  );
 
   Future<bool> updateUser(
     String userId, {
@@ -308,25 +364,40 @@ class ApiService {
     bool includeBatchId = false,
     List<String>? courseIds,
     bool includeCourseIds = false,
-  }) =>
-      UserService.instance.updateUser(
-        userId,
-        name: name,
-        email: email,
-        username: username,
-        role: role,
-        expertise: expertise,
-        batchId: batchId,
-        includeBatchId: includeBatchId,
-        courseIds: courseIds,
-        includeCourseIds: includeCourseIds,
-      );
+  }) => UserService.instance.updateUser(
+    userId,
+    name: name,
+    email: email,
+    username: username,
+    role: role,
+    expertise: expertise,
+    batchId: batchId,
+    includeBatchId: includeBatchId,
+    courseIds: courseIds,
+    includeCourseIds: includeCourseIds,
+  );
 
   Future<bool> deleteUser(String userId) =>
       UserService.instance.deleteUser(userId);
 
   Future<bool> assignCourseToUser(String userId, String courseId) =>
       UserService.instance.assignCourseToUser(userId, courseId);
+
+  Future<bool> assignUserToBatch(String userId, String batchId) =>
+      UserService.instance.assignUserToBatch(userId, batchId);
+
+  Future<bool> removeUserFromBatch(String userId, String batchId) =>
+      UserService.instance.removeUserFromBatch(userId, batchId);
+
+  Future<void> updateUserCourseAssignments(
+    String userId, {
+    List<String> addCourseIds = const [],
+    List<String> removeCourseIds = const [],
+  }) => UserService.instance.updateUserCourseAssignments(
+    userId,
+    addCourseIds: addCourseIds,
+    removeCourseIds: removeCourseIds,
+  );
 
   // ---------------------------------------------------------------------------
   // Projects
@@ -344,12 +415,11 @@ class ApiService {
     String projectId, {
     required String status,
     String? reviewNotes,
-  }) =>
-      ProjectService.instance.updateProjectStatus(
-        projectId,
-        status: status,
-        reviewNotes: reviewNotes,
-      );
+  }) => ProjectService.instance.updateProjectStatus(
+    projectId,
+    status: status,
+    reviewNotes: reviewNotes,
+  );
 
   // ---------------------------------------------------------------------------
   // Notifications
@@ -365,30 +435,46 @@ class ApiService {
     required String title,
     required String message,
     required String targetGroup,
-  }) =>
-      NotificationService.instance.sendAnnouncement(
-        title: title,
-        message: message,
-        targetGroup: targetGroup,
-      );
+  }) => NotificationService.instance.sendAnnouncement(
+    title: title,
+    message: message,
+    targetGroup: targetGroup,
+  );
 
   Future<bool> sendBatchAnnouncement({
     required String batchId,
     required String title,
     required String message,
-  }) =>
-      NotificationService.instance.sendBatchAnnouncement(
-        batchId: batchId,
-        title: title,
-        message: message,
-      );
+  }) => NotificationService.instance.sendBatchAnnouncement(
+    batchId: batchId,
+    title: title,
+    message: message,
+  );
+
+  Future<bool> markNotificationRead(String notificationId) =>
+      NotificationService.instance.markNotificationRead(notificationId);
+
+  Future<bool> deleteNotification(String notificationId) =>
+      NotificationService.instance.deleteNotification(notificationId);
+
+  Future<void> deleteExpiredNotifications() =>
+      NotificationService.instance.deleteExpiredNotifications();
 
   // ---------------------------------------------------------------------------
   // Support
   // ---------------------------------------------------------------------------
 
-  Future<void> sendSupportMessage({required String message}) =>
-      SupportService.instance.sendSupportMessage(message: message);
+  Future<void> sendSupportMessage({
+    required String message,
+    String? userId,
+    String? userName,
+    String? userEmail,
+  }) => SupportService.instance.sendSupportMessage(
+    message: message,
+    userId: userId,
+    userName: userName,
+    userEmail: userEmail,
+  );
 
   // ---------------------------------------------------------------------------
   // Tasks / Submissions
@@ -404,15 +490,14 @@ class ApiService {
     String? fileUrl,
     String? driveLink,
     DateTime? deadline,
-  }) =>
-      TaskService.instance.createTask(
-        batchId: batchId,
-        title: title,
-        description: description,
-        fileUrl: fileUrl,
-        driveLink: driveLink,
-        deadline: deadline,
-      );
+  }) => TaskService.instance.createTask(
+    batchId: batchId,
+    title: title,
+    description: description,
+    fileUrl: fileUrl,
+    driveLink: driveLink,
+    deadline: deadline,
+  );
 
   Future<BatchTask> updateTask({
     required String taskId,
@@ -422,16 +507,15 @@ class ApiService {
     String? fileUrl,
     String? driveLink,
     DateTime? deadline,
-  }) =>
-      TaskService.instance.updateTask(
-        taskId: taskId,
-        batchId: batchId,
-        title: title,
-        description: description,
-        fileUrl: fileUrl,
-        driveLink: driveLink,
-        deadline: deadline,
-      );
+  }) => TaskService.instance.updateTask(
+    taskId: taskId,
+    batchId: batchId,
+    title: title,
+    description: description,
+    fileUrl: fileUrl,
+    driveLink: driveLink,
+    deadline: deadline,
+  );
 
   Future<TaskSubmission> submitTask({
     required String taskId,
@@ -439,14 +523,13 @@ class ApiService {
     String? fileType,
     String? driveLink,
     bool? markDone,
-  }) =>
-      TaskService.instance.submitTask(
-        taskId: taskId,
-        fileUrl: fileUrl,
-        fileType: fileType,
-        driveLink: driveLink,
-        markDone: markDone,
-      );
+  }) => TaskService.instance.submitTask(
+    taskId: taskId,
+    fileUrl: fileUrl,
+    fileType: fileType,
+    driveLink: driveLink,
+    markDone: markDone,
+  );
 
   Future<Map<String, dynamic>> uploadSubmissionToDrive({
     required String taskId,
@@ -454,14 +537,13 @@ class ApiService {
     Uint8List? fileBytes,
     String? filePath,
     String? mimeType,
-  }) =>
-      TaskService.instance.uploadSubmissionToDrive(
-        taskId: taskId,
-        fileName: fileName,
-        fileBytes: fileBytes,
-        filePath: filePath,
-        mimeType: mimeType,
-      );
+  }) => TaskService.instance.uploadSubmissionToDrive(
+    taskId: taskId,
+    fileName: fileName,
+    fileBytes: fileBytes,
+    filePath: filePath,
+    mimeType: mimeType,
+  );
 
   Future<List<TaskSubmission>> getTaskSubmissions(String taskId) =>
       TaskService.instance.getTaskSubmissions(taskId);
@@ -470,12 +552,11 @@ class ApiService {
     required String submissionId,
     required String status,
     String? feedback,
-  }) =>
-      TaskService.instance.reviewSubmission(
-        submissionId: submissionId,
-        status: status,
-        feedback: feedback,
-      );
+  }) => TaskService.instance.reviewSubmission(
+    submissionId: submissionId,
+    status: status,
+    feedback: feedback,
+  );
 
   // ---------------------------------------------------------------------------
   // Email Config
@@ -487,11 +568,10 @@ class ApiService {
   Future<bool> updateEmailConfig({
     required String email,
     required String appPassword,
-  }) =>
-      UserService.instance.updateEmailConfig(
-        email: email,
-        appPassword: appPassword,
-      );
+  }) => UserService.instance.updateEmailConfig(
+    email: email,
+    appPassword: appPassword,
+  );
 
   // ---------------------------------------------------------------------------
   // App Config
@@ -508,7 +588,10 @@ class ApiService {
   // ---------------------------------------------------------------------------
 
   Future<List<Question>> getQuestions({String? mentorId, String? studentId}) =>
-      QuestionService.instance.getQuestions(mentorId: mentorId, studentId: studentId);
+      QuestionService.instance.getQuestions(
+        mentorId: mentorId,
+        studentId: studentId,
+      );
 
   Future<Question> createQuestion({
     required String courseId,
@@ -518,23 +601,28 @@ class ApiService {
     required String title,
     required String description,
     String? attachmentUrl,
-  }) =>
-      QuestionService.instance.createQuestion(
-        courseId: courseId,
-        moduleId: moduleId,
-        lessonId: lessonId,
-        mentorId: mentorId,
-        title: title,
-        description: description,
-        attachmentUrl: attachmentUrl,
-      );
+  }) => QuestionService.instance.createQuestion(
+    courseId: courseId,
+    moduleId: moduleId,
+    lessonId: lessonId,
+    mentorId: mentorId,
+    title: title,
+    description: description,
+    attachmentUrl: attachmentUrl,
+  );
 
   Future<Question> replyToQuestion({
     required String questionId,
     required String reply,
-  }) =>
-      QuestionService.instance.replyToQuestion(
-        questionId: questionId,
-        reply: reply,
-      );
+  }) => QuestionService.instance.replyToQuestion(
+    questionId: questionId,
+    reply: reply,
+  );
+
+  // ---------------------------------------------------------------------------
+  // Generic
+  // ---------------------------------------------------------------------------
+
+  Future<List<Map<String, dynamic>>> getJsonList(String path) =>
+      UserService.instance.getJsonList(path);
 }

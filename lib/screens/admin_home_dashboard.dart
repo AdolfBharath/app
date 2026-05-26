@@ -1,6 +1,5 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'dart:convert';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -8,6 +7,7 @@ import 'package:provider/provider.dart';
 
 import '../config/theme.dart';
 import '../models/batch.dart';
+import '../models/batch_detail.dart';
 import '../models/course.dart';
 import '../models/project.dart';
 import '../models/user.dart';
@@ -18,6 +18,8 @@ import '../providers/course_provider.dart';
 import '../providers/shop_provider.dart';
 import '../providers/config_provider.dart';
 import '../services/api_service.dart';
+import '../services/batch_service.dart';
+import 'package:my_app/widgets/shop_image_thumb.dart';
 import 'active_courses_screen.dart';
 import 'batch_details_screen.dart';
 import 'batch_list_screen.dart';
@@ -35,6 +37,7 @@ class _AdminHomeDashboardState extends State<AdminHomeDashboard> {
   String _searchQuery = '';
   int _pendingProjectCount = 0;
   int _reviewedProjectCount = 0;
+  AppUser? _selectedUser;
 
   @override
   void initState() {
@@ -93,7 +96,9 @@ class _AdminHomeDashboardState extends State<AdminHomeDashboard> {
     final priceController = TextEditingController(
       text: existing == null ? '' : existing.price.toString(),
     );
-    final imageController = TextEditingController(text: existing?.imageUrl ?? '');
+    final imageController = TextEditingController(
+      text: existing?.imageUrl ?? '',
+    );
     final shop = context.read<ShopProvider>();
     bool saving = false;
 
@@ -110,14 +115,20 @@ class _AdminHomeDashboardState extends State<AdminHomeDashboard> {
 
                 if (name.isEmpty || price < 0) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Enter valid name and non-negative price')),
+                    const SnackBar(
+                      content: Text('Enter valid name and non-negative price'),
+                    ),
                   );
                   return;
                 }
 
                 setDialogState(() => saving = true);
                 final ok = existing == null
-                    ? await shop.createShopItem(name: name, price: price, imageUrl: imageUrl)
+                    ? await shop.createShopItem(
+                        name: name,
+                        price: price,
+                        imageUrl: imageUrl,
+                      )
                     : await shop.updateShopItem(
                         itemId: existing.id,
                         name: name,
@@ -147,25 +158,33 @@ class _AdminHomeDashboardState extends State<AdminHomeDashboard> {
               }
 
               return AlertDialog(
-                title: Text(existing == null ? 'Add Shop Item' : 'Edit Shop Item'),
+                title: Text(
+                  existing == null ? 'Add Shop Item' : 'Edit Shop Item',
+                ),
                 content: SingleChildScrollView(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       TextField(
                         controller: nameController,
-                        decoration: const InputDecoration(labelText: 'Item Name'),
+                        decoration: const InputDecoration(
+                          labelText: 'Item Name',
+                        ),
                       ),
                       const SizedBox(height: 10),
                       TextField(
                         controller: priceController,
                         keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(labelText: 'Price (coins)'),
+                        decoration: const InputDecoration(
+                          labelText: 'Price (coins)',
+                        ),
                       ),
                       const SizedBox(height: 10),
                       TextField(
                         controller: imageController,
-                        decoration: const InputDecoration(labelText: 'Image URL / Data URL'),
+                        decoration: const InputDecoration(
+                          labelText: 'Image URL / Data URL',
+                        ),
                       ),
                       const SizedBox(height: 10),
                       Align(
@@ -181,7 +200,9 @@ class _AdminHomeDashboardState extends State<AdminHomeDashboard> {
                 ),
                 actions: [
                   TextButton(
-                    onPressed: saving ? null : () => Navigator.of(dialogContext).pop(),
+                    onPressed: saving
+                        ? null
+                        : () => Navigator.of(dialogContext).pop(),
                     child: const Text('Cancel'),
                   ),
                   FilledButton(
@@ -231,7 +252,11 @@ class _AdminHomeDashboardState extends State<AdminHomeDashboard> {
     if (!mounted) return;
     if (!ok) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.read<ShopProvider>().errorMessage ?? 'Delete failed')),
+        SnackBar(
+          content: Text(
+            context.read<ShopProvider>().errorMessage ?? 'Delete failed',
+          ),
+        ),
       );
     }
   }
@@ -275,9 +300,14 @@ class _AdminHomeDashboardState extends State<AdminHomeDashboard> {
       }).toList();
     }
 
-    final AppUser? focusUser = filteredUsers.isNotEmpty
-        ? filteredUsers.first
-        : null;
+    final AppUser? focusUser = (() {
+      if (_selectedUser != null &&
+          filteredUsers.any((u) => u.id == _selectedUser!.id))
+        return _selectedUser;
+      if (_searchQuery.isNotEmpty && filteredUsers.length == 1)
+        return filteredUsers.first;
+      return null;
+    })();
 
     Batch? activeBatch;
     if (batches.isNotEmpty) {
@@ -337,6 +367,75 @@ class _AdminHomeDashboardState extends State<AdminHomeDashboard> {
                     ],
                   ),
                   const SizedBox(height: 16),
+                  if (_searchQuery.isNotEmpty && filteredUsers.isNotEmpty)
+                    SizedBox(
+                      height: 84,
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        itemCount: filteredUsers.length > 8
+                            ? 8
+                            : filteredUsers.length,
+                        separatorBuilder: (_, __) => const SizedBox(width: 8),
+                        itemBuilder: (context, i) {
+                          final u = filteredUsers[i];
+                          final selected = _selectedUser?.id == u.id;
+                          return GestureDetector(
+                            onTap: () => setState(
+                              () => _selectedUser = selected ? null : u,
+                            ),
+                            child: Container(
+                              width: 220,
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: selected
+                                    ? const Color(0xFFEFF6FF)
+                                    : Colors.white,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: const Color(0xFFE5E7EB),
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  CircleAvatar(
+                                    child: Text(
+                                      u.name.isNotEmpty
+                                          ? u.name[0].toUpperCase()
+                                          : 'U',
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Text(
+                                          u.name,
+                                          style: GoogleFonts.poppins(
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                        Text(
+                                          u.email,
+                                          style: GoogleFonts.poppins(
+                                            fontSize: 12,
+                                            color: const Color(0xFF64748B),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
 
                   // Stats grid — row 1: students + mentors
                   Row(
@@ -643,7 +742,8 @@ class _AdminHomeDashboardState extends State<AdminHomeDashboard> {
                   _AdminShopPreview(
                     items: shopItems,
                     isLoading: shopProvider.isLoading,
-                    onRefresh: () => context.read<ShopProvider>().fetchShopItems(),
+                    onRefresh: () =>
+                        context.read<ShopProvider>().fetchShopItems(),
                     onEdit: (item) => _openShopItemEditor(existing: item),
                     onDelete: _confirmDeleteShopItem,
                   ),
@@ -1168,6 +1268,34 @@ class _StudentAnalyticsCard extends StatelessWidget {
   final bool isStudent;
   final String searchQuery;
 
+  Future<StudentPerformance?> _loadBatchMetrics(
+    BuildContext context,
+    AppUser user,
+  ) async {
+    if (user.batchId == null || user.batchId!.isEmpty) return null;
+    try {
+      final detail = await BatchService.instance.getBatchDetails(user.batchId!);
+      StudentPerformance? found;
+      for (final p in detail.topPerformers) {
+        if (p.student.id == user.id) {
+          found = p;
+          break;
+        }
+      }
+      return found;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<Map<String, dynamic>> _loadQuizSummary(AppUser user) async {
+    try {
+      return ApiService.instance.getStudentQuizSummary(user.id);
+    } catch (_) {
+      return {'attempts': 0, 'best_score': 0, 'average_percent': 0};
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (user == null) {
@@ -1197,18 +1325,30 @@ class _StudentAnalyticsCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              CircleAvatar(
-                radius: 22,
-                backgroundColor: LmsAdminTheme.primaryBlueLight,
-                child: Text(
-                  avatarLetter,
-                  style: GoogleFonts.poppins(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    color: LmsAdminTheme.primaryBlue,
+              if ((user!.profilePicUrl ?? '').isNotEmpty)
+                ClipOval(
+                  child: ShopImageThumb(
+                    imageUrl: user!.profilePicUrl!,
+                    size: 44,
+                  ),
+                )
+              else if ((user!.profilePic ?? '').isNotEmpty)
+                ClipOval(
+                  child: ShopImageThumb(imageUrl: user!.profilePic!, size: 44),
+                )
+              else
+                CircleAvatar(
+                  radius: 22,
+                  backgroundColor: LmsAdminTheme.primaryBlueLight,
+                  child: Text(
+                    avatarLetter,
+                    style: GoogleFonts.poppins(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      color: LmsAdminTheme.primaryBlue,
+                    ),
                   ),
                 ),
-              ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -1237,21 +1377,87 @@ class _StudentAnalyticsCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 16),
-          Row(
-            children: const [
-              Expanded(
-                child: _MiniStatBox(label: 'AVG. SCORE', value: '88%'),
-              ),
-              SizedBox(width: 8),
-              Expanded(
-                child: _MiniStatBox(label: 'COMPLETION', value: '94%'),
-              ),
-              SizedBox(width: 8),
-              Expanded(
-                child: _MiniStatBox(label: 'ACTIVE', value: '12h/w'),
-              ),
-            ],
+          FutureBuilder<StudentPerformance?>(
+            future: _loadBatchMetrics(context, user!),
+            builder: (context, snapshot) {
+              String avgScore = 'N/A';
+              String completion = 'N/A';
+              String active = 'N/A';
+              if (snapshot.connectionState == ConnectionState.done) {
+                final perf = snapshot.data;
+                if (perf != null) {
+                  avgScore = '${perf.score.toInt()}';
+                  completion = '${(perf.progress * 100).toStringAsFixed(0)}%';
+                  final weekly = (user!.weeklyLogins.where((v) => v).length);
+                  final hours = (weekly * 2);
+                  active = '${hours}h/w';
+                } else {
+                  final weekly = (user!.weeklyLogins.where((v) => v).length);
+                  final hours = (weekly * 2);
+                  active = '${hours}h/w';
+                  completion = user!.courseIds.isNotEmpty ? '—' : '—';
+                }
+              }
+
+              return Row(
+                children: [
+                  Expanded(
+                    child: _MiniStatBox(
+                      label: 'AVG. SCORE',
+                      value: avgScore.endsWith('%')
+                          ? avgScore
+                          : '$avgScore pts',
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _MiniStatBox(label: 'COMPLETION', value: completion),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _MiniStatBox(label: 'ACTIVE', value: active),
+                  ),
+                ],
+              );
+            },
           ),
+          if (isStudent) ...[
+            const SizedBox(height: 10),
+            FutureBuilder<Map<String, dynamic>>(
+              future: _loadQuizSummary(user!),
+              builder: (context, snapshot) {
+                final data = snapshot.data ?? const <String, dynamic>{};
+                final attempts = (data['attempts'] as num?)?.toInt() ?? 0;
+                final best = (data['best_score'] as num?)?.toInt() ?? 0;
+                final avg =
+                    (data['average_percent'] as num?)?.toDouble() ?? 0.0;
+                return Row(
+                  children: [
+                    Expanded(
+                      child: _MiniStatBox(
+                        label: 'QUIZ AVG',
+                        value: attempts == 0 ? 'N/A' : '${avg.round()}%',
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _MiniStatBox(
+                        label: 'BEST MARK',
+                        value: attempts == 0 ? 'N/A' : '$best pts',
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _MiniStatBox(
+                        label: 'ATTEMPTS',
+                        value: '$attempts',
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ],
         ],
       ),
     );
@@ -1848,7 +2054,9 @@ class _AdminShopPreview extends StatelessWidget {
             label: const Text('Refresh'),
           ),
         ),
-        ...items.take(6).map(
+        ...items
+            .take(6)
+            .map(
               (item) => Padding(
                 padding: const EdgeInsets.only(bottom: 10),
                 child: _AdminShopItemTile(
@@ -1880,7 +2088,7 @@ class _AdminShopItemTile extends StatelessWidget {
       decoration: LmsAdminTheme.adminCardDecoration(context),
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        leading: _ShopImageThumb(imageUrl: item.imageUrl),
+        leading: ShopImageThumb(imageUrl: item.imageUrl),
         title: Text(
           item.name,
           maxLines: 1,
@@ -1914,50 +2122,6 @@ class _AdminShopItemTile extends StatelessWidget {
   }
 }
 
-class _ShopImageThumb extends StatelessWidget {
-  const _ShopImageThumb({required this.imageUrl});
-
-  final String imageUrl;
-
-  @override
-  Widget build(BuildContext context) {
-    final hasImage = imageUrl.trim().isNotEmpty;
-    final isDataUrl = imageUrl.startsWith('data:image/');
-
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(10),
-      child: Container(
-        width: 48,
-        height: 48,
-        color: const Color(0xFFE2E8F0),
-        child: hasImage
-            ? isDataUrl
-                ? Image.memory(
-                    _decodeDataUrl(imageUrl) ?? Uint8List(0),
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => const Icon(Icons.image_not_supported_outlined),
-                  )
-                : Image.network(
-                    imageUrl,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => const Icon(Icons.image_not_supported_outlined),
-                  )
-            : const Icon(Icons.inventory_2_outlined),
-      ),
-    );
-  }
-}
-
-Uint8List? _decodeDataUrl(String input) {
-  final comma = input.indexOf(',');
-  if (comma < 0 || comma + 1 >= input.length) return null;
-  try {
-    return base64Decode(input.substring(comma + 1));
-  } catch (_) {
-    return null;
-  }
-}
-
 class _PlatformSettingsCard extends StatefulWidget {
   const _PlatformSettingsCard();
 
@@ -1967,41 +2131,64 @@ class _PlatformSettingsCard extends StatefulWidget {
 
 class _PlatformSettingsCardState extends State<_PlatformSettingsCard> {
   final _formUrlController = TextEditingController();
+  final _studentReferenceFormUrlController = TextEditingController();
+  final _courseReviewFormUrlController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
-    _formUrlController.text = context.read<ConfigProvider>().registrationFormUrl;
+    final config = context.read<ConfigProvider>();
+    _formUrlController.text = config.registrationFormUrl;
+    _studentReferenceFormUrlController.text = config.studentReferenceFormUrl;
+    _courseReviewFormUrlController.text = config.courseReviewFormUrl;
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final url = context.watch<ConfigProvider>().registrationFormUrl;
-    if (_formUrlController.text.isEmpty && url.isNotEmpty) {
-      _formUrlController.text = url;
+    final config = context.watch<ConfigProvider>();
+    if (_formUrlController.text.isEmpty &&
+        config.registrationFormUrl.isNotEmpty) {
+      _formUrlController.text = config.registrationFormUrl;
+    }
+    if (_studentReferenceFormUrlController.text.isEmpty &&
+        config.studentReferenceFormUrl.isNotEmpty) {
+      _studentReferenceFormUrlController.text = config.studentReferenceFormUrl;
+    }
+    if (_courseReviewFormUrlController.text.isEmpty &&
+        config.courseReviewFormUrl.isNotEmpty) {
+      _courseReviewFormUrlController.text = config.courseReviewFormUrl;
     }
   }
 
   @override
   void dispose() {
     _formUrlController.dispose();
+    _studentReferenceFormUrlController.dispose();
+    _courseReviewFormUrlController.dispose();
     super.dispose();
   }
 
   Future<void> _save() async {
-    final url = _formUrlController.text.trim();
-    final ok = await context.read<ConfigProvider>().updateRegistrationFormUrl(url);
+    final ok = await context.read<ConfigProvider>().updateFormUrls(
+      registrationFormUrl: _formUrlController.text.trim(),
+      studentReferenceFormUrl: _studentReferenceFormUrlController.text.trim(),
+      courseReviewFormUrl: _courseReviewFormUrlController.text.trim(),
+    );
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(ok ? 'Settings saved successfully' : 'Failed to save settings')),
+      SnackBar(
+        content: Text(
+          ok ? 'Settings saved successfully' : 'Failed to save settings',
+        ),
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     final config = context.watch<ConfigProvider>();
-    
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: LmsAdminTheme.adminCardDecoration(context),
@@ -2043,7 +2230,70 @@ class _PlatformSettingsCardState extends State<_PlatformSettingsCard> {
             controller: _formUrlController,
             decoration: InputDecoration(
               hintText: 'https://forms.gle/xxxxx',
-              hintStyle: GoogleFonts.poppins(fontSize: 13, color: const Color(0xFF9CA3AF)),
+              hintStyle: GoogleFonts.poppins(
+                fontSize: 13,
+                color: const Color(0xFF9CA3AF),
+              ),
+              filled: true,
+              fillColor: const Color(0xFFF8FAFC),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.black.withOpacity(0.04)),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.black.withOpacity(0.04)),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Student Reference Form URL (Google Form)',
+            style: GoogleFonts.poppins(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: LmsAdminTheme.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _studentReferenceFormUrlController,
+            decoration: InputDecoration(
+              hintText: 'https://forms.gle/student-reference',
+              hintStyle: GoogleFonts.poppins(
+                fontSize: 13,
+                color: const Color(0xFF9CA3AF),
+              ),
+              filled: true,
+              fillColor: const Color(0xFFF8FAFC),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.black.withOpacity(0.04)),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.black.withOpacity(0.04)),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Course Review Form URL (Google Form)',
+            style: GoogleFonts.poppins(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: LmsAdminTheme.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _courseReviewFormUrlController,
+            decoration: InputDecoration(
+              hintText: 'https://forms.gle/course-review',
+              hintStyle: GoogleFonts.poppins(
+                fontSize: 13,
+                color: const Color(0xFF9CA3AF),
+              ),
               filled: true,
               fillColor: const Color(0xFFF8FAFC),
               border: OutlineInputBorder(
@@ -2061,9 +2311,16 @@ class _PlatformSettingsCardState extends State<_PlatformSettingsCard> {
             width: double.infinity,
             child: FilledButton.icon(
               onPressed: config.isLoading ? null : _save,
-              icon: config.isLoading 
-                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                : const Icon(Icons.save_rounded, size: 16),
+              icon: config.isLoading
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(Icons.save_rounded, size: 16),
               label: Text(
                 config.isLoading ? 'Saving...' : 'Save Settings',
                 style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
@@ -2071,7 +2328,9 @@ class _PlatformSettingsCardState extends State<_PlatformSettingsCard> {
               style: FilledButton.styleFrom(
                 backgroundColor: const Color(0xFF3B82F6),
                 padding: const EdgeInsets.symmetric(vertical: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
             ),
           ),

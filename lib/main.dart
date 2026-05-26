@@ -12,6 +12,8 @@ import 'features/mentor/presentation/providers/mentor_provider.dart';
 import 'providers/config_provider.dart';
 import 'features/student/presentation/providers/student_provider.dart';
 import 'providers/question_provider.dart';
+import 'providers/theme_provider.dart';
+import 'services/local_cache_service.dart';
 import 'screens/add_course_screen.dart';
 import 'screens/add_user_screen.dart';
 import 'screens/manage_user_screen.dart';
@@ -30,9 +32,10 @@ import 'screens/project_details_screen.dart';
 import 'features/mentor/presentation/screens/mentor_home_screen.dart';
 import 'features/student/presentation/screens/student_shell_screen.dart';
 import 'config/theme.dart';
-import 'providers/theme_provider.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await LocalCacheService.instance.init();
   // On Web, allow runtime fetching so GoogleFonts can load (unless fonts are bundled).
   // On mobile/desktop, prefer bundled fonts (no network dependency).
   GoogleFonts.config.allowRuntimeFetching = true;
@@ -46,7 +49,6 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => ThemeProvider()),
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => CourseProvider()),
         ChangeNotifierProvider(create: (_) => BatchProvider()),
@@ -66,36 +68,35 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => ChatProvider()),
         ChangeNotifierProvider(create: (_) => ConfigProvider()),
         ChangeNotifierProvider(create: (_) => QuestionProvider()),
+        ChangeNotifierProvider(create: (_) => ThemeProvider()),
       ],
       child: Consumer<ThemeProvider>(
-        builder: (context, themeProvider, _) {
-          return MaterialApp(
-            title: 'Jenovate LMS',
-            theme: LmsAdminTheme.lightTheme,
-            darkTheme: LmsAdminTheme.darkTheme,
-            themeMode: themeProvider.themeMode,
-            initialRoute: MarketplaceScreen.routeName,
-            routes: {
-              MarketplaceScreen.routeName: (_) => const MarketplaceScreen(),
-              LoginScreen.routeName: (_) => const LoginScreen(),
-              AdminHomeScreen.routeName: (_) => const AdminHomeScreen(),
-              AdminDashboardScreen.routeName: (_) => const AdminDashboardScreen(),
-              AddCourseScreen.routeName: (_) => const AddCourseScreen(),
-              AddUserScreen.routeName: (_) => const AddUserScreen(),
-              ManageUserScreen.routeName: (_) => const ManageUserScreen(),
-              AdminProfileScreen.routeName: (_) => const AdminProfileScreen(),
-              AddBatchScreen.routeName: (_) => const AddBatchScreen(),
-              CourseDetailScreen.routeName: (_) => const CourseDetailScreen(),
-              ActiveCoursesScreen.routeName: (_) => const ActiveCoursesScreen(),
-              BatchListScreen.routeName: (_) => const BatchListScreen(),
-              BatchDetailsScreen.routeName: (_) => const BatchDetailsScreen(),
-              ReviewProjectsScreen.routeName: (_) => const ReviewProjectsScreen(),
-              ProjectDetailsScreen.routeName: (_) => const ProjectDetailsScreen(),
-              MentorHomeScreen.routeName: (_) => const MentorHomeScreen(),
-              StudentShellScreen.routeName: (_) => const StudentShellScreen(),
-            },
-          );
+        builder: (context, themeProv, _) => MaterialApp(
+        title: 'Jenovate LMS',
+        theme: LmsAdminTheme.lightTheme,
+        darkTheme: LmsAdminTheme.lightTheme,
+        themeMode: themeProv.themeMode,
+        initialRoute: MarketplaceScreen.routeName,
+        routes: {
+          MarketplaceScreen.routeName: (_) => const MarketplaceScreen(),
+          LoginScreen.routeName: (_) => const LoginScreen(),
+          AdminHomeScreen.routeName: (_) => const AdminHomeScreen(),
+          AdminDashboardScreen.routeName: (_) => const AdminDashboardScreen(),
+          AddCourseScreen.routeName: (_) => const AddCourseScreen(),
+          AddUserScreen.routeName: (_) => const AddUserScreen(),
+          ManageUserScreen.routeName: (_) => const ManageUserScreen(),
+          AdminProfileScreen.routeName: (_) => const AdminProfileScreen(),
+          AddBatchScreen.routeName: (_) => const AddBatchScreen(),
+          CourseDetailScreen.routeName: (_) => const CourseDetailScreen(),
+          ActiveCoursesScreen.routeName: (_) => const ActiveCoursesScreen(),
+          BatchListScreen.routeName: (_) => const BatchListScreen(),
+          BatchDetailsScreen.routeName: (_) => const BatchDetailsScreen(),
+          ReviewProjectsScreen.routeName: (_) => const ReviewProjectsScreen(),
+          ProjectDetailsScreen.routeName: (_) => const ProjectDetailsScreen(),
+          MentorHomeScreen.routeName: (_) => const MentorHomeScreen(),
+          StudentShellScreen.routeName: (_) => const StudentShellScreen(),
         },
+      ),
       ),
     );
   }

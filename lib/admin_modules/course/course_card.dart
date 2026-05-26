@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -150,12 +151,12 @@ class CourseCard extends StatelessWidget {
 
   Widget _buildThumbnail() {
     if (course.thumbnailUrl.isNotEmpty) {
-      return Image.network(
-        course.thumbnailUrl,
+      return CachedNetworkImage(
+        imageUrl: course.thumbnailUrl,
         width: 56,
         height: 56,
         fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) {
+        errorWidget: (context, error, stackTrace) {
           return _placeholderThumbnail();
         },
       );

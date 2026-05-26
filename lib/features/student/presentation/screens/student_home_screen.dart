@@ -1,7 +1,9 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../config/theme.dart';
 import '../../../../models/course.dart';
@@ -15,6 +17,13 @@ import 'student_chat_screen.dart';
 import 'student_notifications_screen.dart';
 
 enum _CourseSortMode { top, popular, recent }
+
+Future<void> _openJenovateWebsite() async {
+  await launchUrl(
+    Uri.parse('https://jenovate.in/'),
+    mode: LaunchMode.externalApplication,
+  );
+}
 
 class StudentHomeScreen extends StatefulWidget {
   const StudentHomeScreen({super.key, required this.username});
@@ -176,6 +185,7 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final auth = context.watch<AuthProvider>();
     final student = context.watch<StudentProvider>();
     final courses = student.allCourses;
     final enrolledCourses = student.enrolledCourses;
@@ -243,6 +253,7 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
                       streakDays: student.streakCount,
                       gender: student.gender,
                       profileImageBytes: student.profileImageBytes,
+      profilePicUrl: auth.currentUser?.profilePic,
                       onTap: () => context.read<StudentNavProvider>().setIndex(4),
                       footer: HeroWeeklyFooter(
                         loggedInOnDay: student.loggedInOnDay,
@@ -805,6 +816,8 @@ class _CourseDiscoveryCardState extends State<_CourseDiscoveryCard> {
     final scheme = Theme.of(context).colorScheme;
     final theme = Theme.of(context);
     final course = widget.course;
+    final auth = context.watch<AuthProvider>();
+    final isEnrolled = auth.currentUser?.courseIds.contains(course.id) ?? false;
 
     final diffColor = switch (course.difficulty) {
       CourseDifficulty.beginner     => _diffColors[0],
@@ -843,10 +856,10 @@ class _CourseDiscoveryCardState extends State<_CourseDiscoveryCard> {
                   width: 110,
                   height: 96,
                   child: course.thumbnailUrl.isNotEmpty
-                      ? Image.network(
-                          course.thumbnailUrl,
+                      ? CachedNetworkImage(
+                          imageUrl: course.thumbnailUrl,
                           fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => _ThumbPlaceholder(
+                          errorWidget: (_, __, ___) => _ThumbPlaceholder(
                               color: scheme.primary.withAlpha(20),
                               icon: Icons.play_circle_outline_rounded,
                               iconColor: scheme.primary),
@@ -882,10 +895,8 @@ class _CourseDiscoveryCardState extends State<_CourseDiscoveryCard> {
                               ),
                             ),
                           ),
-                          if (course.isFeatured) ...[
-                            const SizedBox(width: 8),
-                            Icon(Icons.star_rounded, size: 14, color: LmsAdminTheme.coinGold),
-                          ],
+                          if (course.isFeatured) const SizedBox(width: 8),
+                          if (course.isFeatured) Icon(Icons.star_rounded, size: 14, color: LmsAdminTheme.coinGold),
                         ],
                       ),
                       const SizedBox(height: 8),
@@ -897,25 +908,22 @@ class _CourseDiscoveryCardState extends State<_CourseDiscoveryCard> {
                             fontSize: 15, fontWeight: FontWeight.w700, color: scheme.onSurface),
                       ),
                       const SizedBox(height: 4),
-                      if (widget.progress == null || widget.progress == 0) ...[
-                        const SizedBox(height: 6),
+                      if (widget.progress == null || widget.progress == 0) const SizedBox(height: 6),
+                      if (widget.progress == null || widget.progress == 0)
                         Row(
                           children: [
-                            Icon(Icons.monetization_on_rounded, size: 14, color: LmsAdminTheme.coinGold),
-                            const SizedBox(width: 4),
                             Text(
                               course.price == 0 ? 'Free' : '₹${course.price.toStringAsFixed(0)}',
                               style: GoogleFonts.inter(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w800,
-                                color: LmsAdminTheme.coinGold,
+                                color: course.price == 0 ? const Color(0xFF10B981) : LmsAdminTheme.coinGold,
                               ),
                             ),
                           ],
                         ),
-                      ],
-                      if (widget.progress != null && widget.progress! > 0) ...[
-                        const SizedBox(height: 10),
+                      if (widget.progress != null && widget.progress! > 0) const SizedBox(height: 10),
+                      if (widget.progress != null && widget.progress! > 0)
                         Row(
                           children: [
                             Expanded(
@@ -940,15 +948,38 @@ class _CourseDiscoveryCardState extends State<_CourseDiscoveryCard> {
                             ),
                           ],
                         ),
-                      ],
                     ],
                   ),
                 ),
               ),
               Padding(
                 padding: const EdgeInsets.only(right: 12),
-                child: Icon(Icons.chevron_right_rounded,
-                    size: 20, color: scheme.onSurface.withAlpha(100)),
+                child: isEnrolled
+                    ? Icon(
+                        Icons.chevron_right_rounded,
+                        size: 20,
+                        color: scheme.onSurface.withAlpha(100),
+                      )
+                    : FilledButton(
+                        onPressed: _openJenovateWebsite,
+                        style: FilledButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          minimumSize: const Size(0, 34),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                        child: Text(
+                          'Buy Now',
+                          style: GoogleFonts.inter(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
               ),
             ],
           ),
@@ -987,6 +1018,8 @@ class _PopularCourseCardState extends State<_PopularCourseCard> {
     final scheme = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
     final course = widget.course;
+    final auth = context.watch<AuthProvider>();
+    final isEnrolled = auth.currentUser?.courseIds.contains(course.id) ?? false;
 
     return GestureDetector(
       onTapDown: (_) => setState(() => _pressed = true),
@@ -1019,10 +1052,10 @@ class _PopularCourseCardState extends State<_PopularCourseCard> {
                   width: 100,
                   height: 100,
                   child: course.thumbnailUrl.isNotEmpty
-                      ? Image.network(
-                          course.thumbnailUrl,
+                      ? CachedNetworkImage(
+                          imageUrl: course.thumbnailUrl,
                           fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => _ThumbPlaceholder(
+                          errorWidget: (_, __, ___) => _ThumbPlaceholder(
                               color: scheme.primary.withAlpha(20),
                               icon: Icons.play_circle_outline_rounded,
                               iconColor: scheme.primary),
@@ -1075,18 +1108,41 @@ class _PopularCourseCardState extends State<_PopularCourseCard> {
                       const SizedBox(height: 8),
                       Row(
                         children: [
-                          Icon(Icons.monetization_on_rounded, size: 14, color: LmsAdminTheme.coinGold),
-                          const SizedBox(width: 4),
                           Text(
                             course.price == 0 ? 'Free' : '₹${course.price.toStringAsFixed(0)}', 
                             style: GoogleFonts.inter(
                               fontSize: 12,
                               fontWeight: FontWeight.w800,
-                              color: LmsAdminTheme.coinGold,
+                              color: course.price == 0 ? const Color(0xFF10B981) : LmsAdminTheme.coinGold,
                             ),
                           ),
                         ],
                       ),
+                      if (!isEnrolled) const SizedBox(height: 8),
+                      if (!isEnrolled)
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: FilledButton(
+                            onPressed: _openJenovateWebsite,
+                            style: FilledButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 6,
+                              ),
+                              minimumSize: const Size(0, 30),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(9),
+                              ),
+                            ),
+                            child: Text(
+                              'Buy Now',
+                              style: GoogleFonts.inter(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                 ),
@@ -1139,14 +1195,13 @@ class _EmptyState extends StatelessWidget {
               style: GoogleFonts.inter(
                   fontWeight: FontWeight.w600,
                   color: scheme.onSurface.withAlpha(160))),
-          if (sub != null) ...[
-            const SizedBox(height: 4),
+          if (sub != null) const SizedBox(height: 4),
+          if (sub != null)
             Text(sub!,
                 textAlign: TextAlign.center,
                 style: GoogleFonts.inter(
                     fontSize: 12,
                     color: scheme.onSurface.withAlpha(120))),
-          ],
         ],
       ),
     );

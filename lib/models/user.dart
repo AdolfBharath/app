@@ -8,10 +8,14 @@ class AppUser {
   final UserRole role;
   final String? username;
   final String? adminNo;
+  final String? referralKey;
   final String? phone;
   final String? batchId;
+  final List<String> batchIds;
   final List<String> expertise;
   final List<String> courseIds;
+  final String? profilePic;
+  final String? profilePicUrl;
   final int streakCount;
   final DateTime? lastActiveDate;
   final int coins;
@@ -25,8 +29,12 @@ class AppUser {
     required this.role,
     this.username,
     this.adminNo,
+    this.referralKey,
     this.phone,
     this.batchId,
+    this.batchIds = const [],
+    this.profilePic,
+    this.profilePicUrl,
     this.expertise = const [],
     this.courseIds = const [],
     this.streakCount = 0,

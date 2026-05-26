@@ -92,12 +92,17 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
     final next = _newPasswordController.text.trim();
 
     try {
-      await ApiService.instance.changeAdminPassword(
+      final auth = Provider.of<AuthProvider>(context, listen: false);
+      final success = await auth.changePassword(
         currentPassword: current,
         newPassword: next,
       );
 
       if (!mounted) return;
+
+      if (!success) {
+        throw Exception('Incorrect current password or failed to update');
+      }
 
       _currentPasswordController.clear();
       _newPasswordController.clear();
@@ -111,20 +116,10 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
           ),
         ),
       );
-    } on ApiException catch (e) {
+    } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message, style: GoogleFonts.poppins())),
-      );
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Failed to change password',
-            style: GoogleFonts.poppins(),
-          ),
-        ),
+        SnackBar(content: Text(e.toString().replaceAll('Exception: ', ''), style: GoogleFonts.poppins())),
       );
     } finally {
       if (mounted) {

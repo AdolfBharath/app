@@ -18,6 +18,24 @@ class StudentSupportScreen extends StatefulWidget {
 class _StudentSupportScreenState extends State<StudentSupportScreen> {
   final _controller = TextEditingController();
   bool _sending = false;
+  String? _adminEmail;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAdminEmail();
+  }
+
+  Future<void> _loadAdminEmail() async {
+    try {
+      final config = await ApiService.instance.getEmailConfig();
+      final email = config['email']?.toString();
+      if (!mounted) return;
+      setState(() => _adminEmail = email);
+    } catch (_) {
+      // Keep fallback.
+    }
+  }
 
   @override
   void dispose() {
@@ -37,7 +55,12 @@ class _StudentSupportScreenState extends State<StudentSupportScreen> {
 
     setState(() => _sending = true);
     try {
-      await ApiService.instance.sendSupportMessage(message: message);
+      await ApiService.instance.sendSupportMessage(
+        message: message,
+        userId: auth.currentUser?.id,
+        userName: username,
+        userEmail: auth.currentUser?.email,
+      );
       if (!mounted) return;
       _controller.clear();
       _showTopBanner(context, 'Message sent. We\'ll get back to you soon, $username.');
@@ -195,7 +218,7 @@ class _StudentSupportScreenState extends State<StudentSupportScreen> {
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            'Admin Email: support@jenovate.com',
+                            'Admin Email: ${_adminEmail ?? 'support@jenovate.com'}',
                             style: GoogleFonts.poppins(
                               fontSize: 12,
                               color: scheme.onSurface.withAlpha(160),

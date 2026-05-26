@@ -4,13 +4,17 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../config/theme.dart';
+import '../../../../models/batch.dart';
+import '../../../../models/batch_detail.dart';
 import '../../../../providers/auth_provider.dart';
 import '../../../../providers/batch_provider.dart';
 import '../../../../screens/batch_tasks_screen.dart';
+import '../../../../services/api_service.dart';
 import '../providers/student_nav_provider.dart';
 import '../widgets/student_header_row.dart';
 import 'batch_chat_screen.dart';
 import 'student_notifications_screen.dart';
+import 'package:my_app/utils/ui_utils.dart';
 
 class StudentBatchScreen extends StatefulWidget {
   const StudentBatchScreen({super.key});
@@ -21,6 +25,9 @@ class StudentBatchScreen extends StatefulWidget {
 
 class _StudentBatchScreenState extends State<StudentBatchScreen> {
   bool _loaded = false;
+  String? _selectedBatchId;
+  final Map<String, BatchDetail> _batchDetails = <String, BatchDetail>{};
+  final Set<String> _loadingDetails = <String>{};
 
   @override
   void didChangeDependencies() {
@@ -32,6 +39,25 @@ class _StudentBatchScreenState extends State<StudentBatchScreen> {
     });
   }
 
+  Future<void> _loadBatchDetails(String batchId) async {
+    if (batchId.trim().isEmpty ||
+        _batchDetails.containsKey(batchId) ||
+        _loadingDetails.contains(batchId)) {
+      return;
+    }
+    if (!mounted) return;
+    setState(() => _loadingDetails.add(batchId));
+    try {
+      final detail = await ApiService.instance.getBatchDetails(batchId);
+      if (!mounted) return;
+      setState(() => _batchDetails[batchId] = detail);
+    } catch (_) {
+      // Keep the page usable when leaderboard data is temporarily unavailable.
+    } finally {
+      if (mounted) setState(() => _loadingDetails.remove(batchId));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -40,16 +66,52 @@ class _StudentBatchScreenState extends State<StudentBatchScreen> {
     final batchProvider = context.watch<BatchProvider>();
     final user = auth.currentUser;
 
-    final assigned = user?.batchId == null
-        ? null
-        : batchProvider.batches.where((b) => b.id == user!.batchId).toList();
-    final myBatch = assigned != null && assigned.isNotEmpty ? assigned.first : null;
+    final assignedBatchIds = <String>{
+      ...?user?.batchIds,
+      if (user?.batchId?.trim().isNotEmpty == true) user!.batchId!,
+    };
+    final assigned = batchProvider.batches
+        .where((b) => assignedBatchIds.contains(b.id))
+        .toList(growable: false);
+    if ((_selectedBatchId == null ||
+            !assigned.any((b) => b.id == _selectedBatchId)) &&
+        assigned.isNotEmpty) {
+      _selectedBatchId = assigned.first.id;
+    }
+    Batch? myBatch;
+    for (final batch in assigned) {
+      if (batch.id == _selectedBatchId) {
+        myBatch = batch;
+        break;
+      }
+    }
+    myBatch ??= assigned.isNotEmpty ? assigned.first : null;
+    if (myBatch != null &&
+        !_batchDetails.containsKey(myBatch.id) &&
+        !_loadingDetails.contains(myBatch.id)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _loadBatchDetails(myBatch!.id);
+      });
+    }
+    final selectedDetail = myBatch == null ? null : _batchDetails[myBatch.id];
+    final leaderboard =
+        selectedDetail?.topPerformers ?? const <StudentPerformance>[];
+    final isLeaderboardLoading =
+        myBatch != null && _loadingDetails.contains(myBatch.id);
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
       body: SafeArea(
         child: RefreshIndicator(
-          onRefresh: () async => context.read<BatchProvider>().loadBatches(),
+          onRefresh: () async {
+            await context.read<BatchProvider>().loadBatches();
+            if (!mounted) return;
+            final batchId = _selectedBatchId;
+            if (batchId != null) {
+              setState(() => _batchDetails.remove(batchId));
+              await _loadBatchDetails(batchId);
+            }
+          },
           child: CustomScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
@@ -80,7 +142,22 @@ class _StudentBatchScreenState extends State<StudentBatchScreen> {
                     const SizedBox(height: 20),
 
                     // ── Active batch hero card ──────────────────────────
-                    _BatchHeroCard(myBatch: myBatch).animate().fadeIn(duration: 350.ms).slideY(begin: 0.08, end: 0),
+                    _BatchHeroCard(myBatch: myBatch)
+                        .animate()
+                        .fadeIn(duration: 350.ms)
+                        .slideY(begin: 0.08, end: 0),
+
+                    if (assigned.length > 1) ...[
+                      const SizedBox(height: 12),
+                      _BatchSwitcher(
+                        batches: assigned,
+                        selectedBatchId: myBatch?.id,
+                        onSelected: (batchId) {
+                          setState(() => _selectedBatchId = batchId);
+                          _loadBatchDetails(batchId);
+                        },
+                      ),
+                    ],
 
                     const SizedBox(height: 16),
 
@@ -94,23 +171,22 @@ class _StudentBatchScreenState extends State<StudentBatchScreen> {
                             subtitle: 'Stay in sync',
                             gradient: LmsStudentTheme.heroGradientFor(context),
                             onTap: () {
-                              if (myBatch == null) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text('No batch assigned yet',
-                                        style: GoogleFonts.inter()),
-                                    behavior: SnackBarBehavior.floating,
-                                    shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(12)),
-                                  ),
+                              final selectedBatch = myBatch;
+                              if (selectedBatch == null) {
+                                showTopNotification(
+                                  context,
+                                  'No batch assigned yet',
                                 );
                                 return;
                               }
-                              Navigator.of(context).push(MaterialPageRoute(
-                                builder: (_) => BatchChatScreen(
-                                    batchId: myBatch.id,
-                                    batchName: myBatch.name),
-                              ));
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => BatchChatScreen(
+                                    batchId: selectedBatch.id,
+                                    batchName: selectedBatch.name,
+                                  ),
+                                ),
+                              );
                             },
                           ),
                         ),
@@ -125,14 +201,18 @@ class _StudentBatchScreenState extends State<StudentBatchScreen> {
                               Color(0xFF06B6D4),
                             ],
                             onTap: () {
-                              if (myBatch == null) {
+                              final selectedBatch = myBatch;
+                              if (selectedBatch == null) {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(
-                                    content: Text('No batch assigned yet',
-                                        style: GoogleFonts.inter()),
+                                    content: Text(
+                                      'No batch assigned yet',
+                                      style: GoogleFonts.inter(),
+                                    ),
                                     behavior: SnackBarBehavior.floating,
                                     shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(12)),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
                                   ),
                                 );
                                 return;
@@ -140,8 +220,8 @@ class _StudentBatchScreenState extends State<StudentBatchScreen> {
                               Navigator.of(context).push(
                                 MaterialPageRoute(
                                   builder: (_) => BatchTasksScreen(
-                                    batchId: myBatch.id,
-                                    batchName: myBatch.name,
+                                    batchId: selectedBatch.id,
+                                    batchName: selectedBatch.name,
                                     canSubmit: true,
                                   ),
                                 ),
@@ -158,52 +238,27 @@ class _StudentBatchScreenState extends State<StudentBatchScreen> {
                     Row(
                       children: [
                         Expanded(
-                          child: Text('Top Performers',
-                              style: theme.textTheme.titleSmall),
+                          child: Text(
+                            'Top Performers',
+                            style: theme.textTheme.titleSmall,
+                          ),
                         ),
                         TextButton(
                           onPressed: () {},
                           child: Text(
                             'Leaderboard',
                             style: GoogleFonts.inter(
-                                fontSize: 12, fontWeight: FontWeight.w700),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
                         ),
                       ],
                     ),
                     const SizedBox(height: 10),
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: scheme.surface,
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                            color: scheme.onSurface.withAlpha(10)),
-                        boxShadow: [
-                          BoxShadow(
-                            color: theme.shadowColor.withAlpha(8),
-                            blurRadius: 16,
-                            offset: const Offset(0, 6),
-                          ),
-                        ],
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(Icons.emoji_events_outlined,
-                              color: LmsAdminTheme.coinGold, size: 28),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              'Leaderboard will appear here once batch performance data is available.',
-                              style: GoogleFonts.inter(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
-                                color: scheme.onSurface.withAlpha(160),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
+                    _LeaderboardCard(
+                      performers: leaderboard,
+                      isLoading: isLeaderboardLoading,
                     ),
 
                     const SizedBox(height: 24),
@@ -217,14 +272,18 @@ class _StudentBatchScreenState extends State<StudentBatchScreen> {
                         child: Center(
                           child: Column(
                             children: [
-                              Icon(Icons.groups_2_outlined,
-                                  size: 40,
-                                  color: scheme.onSurface.withAlpha(80)),
+                              Icon(
+                                Icons.groups_2_outlined,
+                                size: 40,
+                                color: scheme.onSurface.withAlpha(80),
+                              ),
                               const SizedBox(height: 8),
-                              Text('No batches available yet',
-                                  style: GoogleFonts.inter(
-                                    color: scheme.onSurface.withAlpha(160),
-                                  )),
+                              Text(
+                                'No batches available yet',
+                                style: GoogleFonts.inter(
+                                  color: scheme.onSurface.withAlpha(160),
+                                ),
+                              ),
                             ],
                           ),
                         ),
@@ -234,13 +293,15 @@ class _StudentBatchScreenState extends State<StudentBatchScreen> {
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
                         itemCount: batchProvider.batches.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 10),
+                        separatorBuilder: (context, index) =>
+                            const SizedBox(height: 10),
                         itemBuilder: (context, index) {
                           final batch = batchProvider.batches[index];
-                          final isMine = user?.batchId != null &&
-                              user!.batchId == batch.id;
+                          final isMine = assignedBatchIds.contains(batch.id);
                           return _BatchListCard(batch: batch, isMine: isMine)
-                              .animate(delay: Duration(milliseconds: index * 60))
+                              .animate(
+                                delay: Duration(milliseconds: index * 60),
+                              )
                               .fadeIn(duration: 280.ms)
                               .slideX(begin: 0.04, end: 0);
                         },
@@ -258,6 +319,129 @@ class _StudentBatchScreenState extends State<StudentBatchScreen> {
 }
 
 // ─── Batch hero card ──────────────────────────────────────────────────────────
+class _LeaderboardCard extends StatelessWidget {
+  const _LeaderboardCard({
+    required this.performers,
+    required this.isLoading,
+  });
+
+  final List<StudentPerformance> performers;
+  final bool isLoading;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final visible = performers.take(5).toList(growable: false);
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: scheme.onSurface.withAlpha(10)),
+        boxShadow: [
+          BoxShadow(
+            color: theme.shadowColor.withAlpha(8),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: isLoading
+          ? const Center(
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 10),
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            )
+          : visible.isEmpty
+          ? Row(
+              children: [
+                Icon(
+                  Icons.emoji_events_outlined,
+                  color: LmsAdminTheme.coinGold,
+                  size: 28,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Leaderboard will appear here once batch performance data is available.',
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: scheme.onSurface.withAlpha(160),
+                    ),
+                  ),
+                ),
+              ],
+            )
+          : Column(
+              children: visible.map((item) {
+                final progressPercent = (item.progress * 100).round();
+                final subtitle = item.totalAssignments > 0
+                    ? '$progressPercent% progress'
+                    : 'Progress pending';
+                return Padding(
+                  padding: EdgeInsets.only(
+                    bottom: item == visible.last ? 0 : 12,
+                  ),
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 16,
+                        backgroundColor: LmsAdminTheme.coinGold.withAlpha(32),
+                        child: Text(
+                          '${item.rank}',
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                            color: LmsAdminTheme.coinGold,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              item.student.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.inter(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            Text(
+                              subtitle,
+                              style: GoogleFonts.inter(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
+                                color: scheme.onSurface.withAlpha(150),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Text(
+                        '${item.score.toStringAsFixed(0)} pts',
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          color: scheme.primary,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(growable: false),
+            ),
+    );
+  }
+}
+
 class _BatchHeroCard extends StatelessWidget {
   const _BatchHeroCard({required this.myBatch});
 
@@ -265,8 +449,6 @@ class _BatchHeroCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
     final gradColors = LmsStudentTheme.heroGradientFor(context);
 
     return Container(
@@ -394,6 +576,60 @@ class _StatBubble extends StatelessWidget {
 }
 
 // ─── Quick action card ────────────────────────────────────────────────────────
+class _BatchSwitcher extends StatelessWidget {
+  const _BatchSwitcher({
+    required this.batches,
+    required this.selectedBatchId,
+    required this.onSelected,
+  });
+
+  final List<Batch> batches;
+  final String? selectedBatchId;
+  final ValueChanged<String> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return SizedBox(
+      height: 42,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: batches.length,
+        separatorBuilder: (context, index) => const SizedBox(width: 8),
+        itemBuilder: (context, index) {
+          final batch = batches[index];
+          final selected = batch.id == selectedBatchId;
+          return ChoiceChip(
+            selected: selected,
+            label: Text(
+              batch.name,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: selected ? Colors.white : scheme.onSurface,
+              ),
+            ),
+            avatar: Icon(
+              Icons.groups_2_outlined,
+              size: 16,
+              color: selected ? Colors.white : scheme.primary,
+            ),
+            selectedColor: scheme.primary,
+            backgroundColor: scheme.surface,
+            side: BorderSide(
+              color: selected
+                  ? scheme.primary
+                  : scheme.onSurface.withValues(alpha: 0.12),
+            ),
+            onSelected: (_) => onSelected(batch.id),
+          );
+        },
+      ),
+    );
+  }
+}
+
 class _QuickActionCard extends StatefulWidget {
   const _QuickActionCard({
     required this.icon,
@@ -489,8 +725,7 @@ class _BatchListCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final accent =
-        isMine ? const Color(0xFF10B981) : scheme.primary;
+    final accent = isMine ? const Color(0xFF10B981) : scheme.primary;
 
     return Container(
       decoration: BoxDecoration(
@@ -550,8 +785,11 @@ class _BatchListCard extends StatelessWidget {
                   ),
                 ),
               )
-            : Icon(Icons.arrow_forward_ios_rounded,
-                size: 14, color: scheme.onSurface.withAlpha(140)),
+            : Icon(
+                Icons.arrow_forward_ios_rounded,
+                size: 14,
+                color: scheme.onSurface.withAlpha(140),
+              ),
       ),
     );
   }
