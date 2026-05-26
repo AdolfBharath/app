@@ -35,15 +35,16 @@ class _StudentShellScreenState extends State<StudentShellScreen> {
       if (!mounted) return;
       final auth = context.read<AuthProvider>();
       final studentProvider = context.read<StudentProvider>();
-      
+
       // Refresh user to get assigned courses list
       await auth.refreshCurrentUser();
       if (!mounted) return;
-      
+
       if (auth.currentUser != null) {
+        await studentProvider.setActiveUser(auth.currentUser!.id);
         studentProvider.syncWithUser(auth.currentUser);
       }
-      
+
       final assignedCourseIds = auth.currentUser?.courseIds ?? const <String>[];
       await studentProvider.fetchCourses(assignedCourseIds: assignedCourseIds);
       await studentProvider.fetchNotifications();
@@ -58,7 +59,9 @@ class _StudentShellScreenState extends State<StudentShellScreen> {
       final auth = context.read<AuthProvider>();
       await auth.refreshCurrentUser();
       if (mounted && auth.currentUser != null) {
-        context.read<StudentProvider>().syncWithUser(auth.currentUser);
+        final studentProvider = context.read<StudentProvider>();
+        await studentProvider.setActiveUser(auth.currentUser!.id);
+        studentProvider.syncWithUser(auth.currentUser);
       }
     });
     WidgetsBinding.instance.addObserver(_lifecycleObserver);
@@ -69,8 +72,9 @@ class _StudentShellScreenState extends State<StudentShellScreen> {
         final studentProvider = context.read<StudentProvider>();
         await auth.refreshCurrentUser();
         if (!mounted) return;
-        
+
         if (auth.currentUser != null) {
+          await studentProvider.setActiveUser(auth.currentUser!.id);
           studentProvider.syncWithUser(auth.currentUser);
         }
 

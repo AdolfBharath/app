@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import '../models/user.dart';
 import '../services/api_client.dart';
 import '../services/api_service.dart' as admin_api;
+import '../services/local_cache_service.dart';
 import '../services/token_service.dart';
 
 class AuthProvider extends ChangeNotifier {
@@ -190,6 +191,7 @@ class AuthProvider extends ChangeNotifier {
   Future<bool> login(String email, String password) async {
     try {
       _lastLoginError = null;
+      await LocalCacheService.instance.clearAll();
       // Use the server-side RPC `lms_password_login` which safely checks
       // the password on the server and avoids exposing the password column
       // to the anon role in RLS-enabled environments.
@@ -268,10 +270,11 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  void logout() {
+  Future<void> logout() async {
     _currentUser = null;
     // Clear any stored token on logout.
-    TokenService.removeToken();
+    await TokenService.removeToken();
+    await LocalCacheService.instance.clearAll();
     notifyListeners();
   }
 
@@ -758,7 +761,7 @@ class AuthProvider extends ChangeNotifier {
       try {
         await _api.patchJson('/users?id=eq.${updatedUser.id}', {
           'streak_count': streak,
-          'last_active_date': (lastActive ?? today).toIso8601String(),
+          'last_active_date': lastActive.toIso8601String(),
           'coins': coins,
           'weekly_logins': weeklyLogins,
         });

@@ -94,6 +94,14 @@ class LocalCacheService {
       }
     }
   }
+
+  Future<void> clearAll() async {
+    _memory.clear();
+    _inFlight.clear();
+    if (isReady) {
+      await _box!.clear();
+    }
+  }
 }
 
 class _MemoryEntry {

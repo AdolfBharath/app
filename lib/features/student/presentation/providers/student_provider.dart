@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -47,15 +48,12 @@ class StudentNotification {
 }
 
 class StudentProvider extends ChangeNotifier {
-  StudentProvider() {
-    _storageReady = _loadFromStorage();
-  }
+  static const _guestUserKey = 'guest';
+  static const _genderKeyPrefix = 'student_gender';
+  static const _profileImageKeyPrefix = 'student_profile_image_base64';
+  static const _purchasedItemIdsKeyPrefix = 'student_purchased_item_ids';
 
-  late final Future<void> _storageReady;
-
-  static const _genderKey = 'student_gender';
-  static const _profileImageKey = 'student_profile_image_base64';
-
+  String? _activeUserId;
   int _coins = 0;
   int _streakCount = 0;
   DateTime? _lastLoginDate;
@@ -136,7 +134,34 @@ class StudentProvider extends ChangeNotifier {
   bool isProgressLoading(String courseId) =>
       _isLoadingProgress[courseId] ?? false;
 
-  static const _purchasedItemIdsKey = 'student_purchased_item_ids';
+  String get _storageUserKey {
+    final id = _activeUserId?.trim();
+    return id == null || id.isEmpty ? _guestUserKey : id;
+  }
+
+  String get _genderKey => '${_genderKeyPrefix}_$_storageUserKey';
+  String get _profileImageKey => '${_profileImageKeyPrefix}_$_storageUserKey';
+  String get _purchasedItemIdsKey =>
+      '${_purchasedItemIdsKeyPrefix}_$_storageUserKey';
+
+  void _resetUserScopedState() {
+    _gender = 'male';
+    _profileImageBytes = null;
+    _purchasedItems.clear();
+    _cachedPurchasedIds.clear();
+  }
+
+  Future<void> setActiveUser(String? userId) async {
+    final normalized = userId?.trim();
+    final nextUserId =
+        normalized == null || normalized.isEmpty ? null : normalized;
+    if (_activeUserId == nextUserId) return;
+
+    _activeUserId = nextUserId;
+    _resetUserScopedState();
+    await _loadFromStorage();
+    notifyListeners();
+  }
 
   Future<void> _loadFromStorage() async {
     final prefs = await SharedPreferences.getInstance();
@@ -184,6 +209,11 @@ class StudentProvider extends ChangeNotifier {
   /// The backend is the single source of truth for coins, streaks, and activity.
   void syncWithUser(dynamic user) {
     if (user == null) return;
+    final userId = user.id?.toString();
+    if (userId != null && userId.isNotEmpty && userId != _activeUserId) {
+      unawaited(setActiveUser(userId));
+    }
+
     _coins = user.coins;
     _streakCount = user.streakCount;
     _lastLoginDate = user.lastActiveDate;
@@ -414,6 +444,7 @@ class StudentProvider extends ChangeNotifier {
   }
 
   Future<void> fetchPurchasedItems(String userId) async {
+    await setActiveUser(userId);
     _isLoading = true;
     notifyListeners();
 
@@ -453,15 +484,17 @@ class StudentProvider extends ChangeNotifier {
           try {
             final item = allShopItems.firstWhere((i) => i.id == cachedId);
             _purchasedItems.add(item);
-            if (kDebugMode)
+            if (kDebugMode) {
               print('Added offline item to purchased: ${item.name}');
+            }
           } catch (_) {}
         }
       }
 
       await _savePurchasedItems();
-      if (kDebugMode)
+      if (kDebugMode) {
         print('Total purchased items loaded: ${_purchasedItems.length}');
+      }
     } catch (e) {
       if (kDebugMode) print('Fetch purchased items failed: $e');
     } finally {
